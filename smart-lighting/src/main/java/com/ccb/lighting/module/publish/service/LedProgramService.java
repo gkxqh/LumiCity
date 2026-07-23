@@ -2,6 +2,7 @@ package com.ccb.lighting.module.publish.service;
 
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.ccb.lighting.common.PageQuery;
+import com.ccb.lighting.module.publish.dto.LedProgramQueryDTO;
 import com.ccb.lighting.module.publish.entity.LedProgram;
 
 /**
@@ -32,6 +33,8 @@ public interface LedProgramService {
      * @return 节目实体
      */
     LedProgram getById(Long id);
+
+    IPage<LedProgram> pageListByQuery(LedProgramQueryDTO query);
 
     /**
      * 新增节目
