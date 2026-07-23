@@ -6,6 +6,7 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.ccb.lighting.common.BusinessException;
 import com.ccb.lighting.common.PageQuery;
 import com.ccb.lighting.common.ResultCode;
+import com.ccb.lighting.module.publish.dto.LedProgramQueryDTO;
 import com.ccb.lighting.module.publish.entity.LedProgram;
 import com.ccb.lighting.module.publish.mapper.LedProgramMapper;
 import com.ccb.lighting.module.publish.service.LedProgramService;
@@ -50,6 +51,26 @@ public class LedProgramServiceImpl implements LedProgramService {
             throw new BusinessException(ResultCode.DATA_NOT_FOUND);
         }
         return program;
+    }
+
+    @Override
+    public IPage<LedProgram> pageListByQuery(LedProgramQueryDTO query) {
+        LambdaQueryWrapper<LedProgram> wrapper = new LambdaQueryWrapper<>();
+        if(query.getProgramName() != null && !query.getProgramName().isEmpty()){
+            wrapper.like(LedProgram::getProgramName,query.getProgramName());
+        }
+        if(query.getMediaType()!=null){
+            wrapper.like(LedProgram::getMediaType,query.getMediaType());
+        }
+        if (query.getStatus() != null) {
+            wrapper.eq(LedProgram::getStatus, query.getStatus());
+        }
+        wrapper.orderByDesc(LedProgram::getCreateTime);
+        return ledProgramMapper.selectPage(
+                new Page<>(query.getCurrent(), query.getSize()),
+                wrapper
+        );
+
     }
 
     /**
