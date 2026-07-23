@@ -1,0 +1,68 @@
+package com.ccb.lighting.module.workorder.service;
+
+import com.baomidou.mybatisplus.core.metadata.IPage;
+import com.ccb.lighting.common.PageQuery;
+import com.ccb.lighting.module.workorder.entity.WorkOrder;
+
+/**
+ * 工单 Service 接口
+ *
+ * <p>方法清单：
+ * - pageList：分页查询工单列表
+ * - getById：根据 id 查工单详情
+ * - add：新增工单（自动生成工单编号）
+ * - assign：派单（指定处理人，状态 0→1）
+ * - handle：处理（运维人员开始处理，状态推进到 1）
+ * - finish：完成（处理完毕，状态 1→2，记录完成时间）</p>
+ */
+public interface WorkOrderService {
+
+    /**
+     * 分页查询工单列表
+     *
+     * @param query 分页参数
+     * @return 分页对象
+     */
+    IPage<WorkOrder> pageList(PageQuery query);
+
+    /**
+     * 根据 id 查询工单详情
+     *
+     * @param id 工单 ID
+     * @return 工单实体
+     */
+    WorkOrder getById(Long id);
+
+    /**
+     * 新增工单
+     * 系统自动生成工单编号，状态默认 0 待处理
+     *
+     * @param order 工单信息
+     */
+    void add(WorkOrder order);
+
+    /**
+     * 派单
+     * 指定处理人，状态从 0 待处理 推进到 1 处理中
+     *
+     * @param id          工单 ID
+     * @param assigneeId  指派人 ID
+     */
+    void assign(Long id, Long assigneeId);
+
+    /**
+     * 处理工单
+     * 运维人员接单后开始处理，状态推进到 1 处理中
+     *
+     * @param id 工单 ID
+     */
+    void handle(Long id);
+
+    /**
+     * 完成工单
+     * 处理完毕，状态从 1 处理中 推进到 2 已完成，记录完成时间
+     *
+     * @param id 工单 ID
+     */
+    void finish(Long id);
+}

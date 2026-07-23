@@ -1,0 +1,53 @@
+package com.ccb.lighting.module.alarm.service;
+
+import com.baomidou.mybatisplus.core.metadata.IPage;
+import com.ccb.lighting.common.PageQuery;
+import com.ccb.lighting.module.alarm.entity.AlarmRecord;
+
+import java.util.Map;
+
+/**
+ * 告警记录 Service 接口
+ *
+ * <p>方法清单：
+ * - pageList：分页查询告警记录（支持按类型、级别、状态筛选）
+ * - getById：根据 id 查告警详情
+ * - handle：处理告警（更新状态、记录处理人、处理时间）
+ * - statistics：告警统计（各状态数量、各类型数量等）</p>
+ */
+public interface AlarmRecordService {
+
+    /**
+     * 分页查询告警记录
+     *
+     * @param query 分页参数
+     * @return 分页对象
+     */
+    IPage<AlarmRecord> pageList(PageQuery query);
+
+    /**
+     * 根据 id 查询告警详情
+     *
+     * @param id 告警 ID
+     * @return 告警记录
+     */
+    AlarmRecord getById(Long id);
+
+    /**
+     * 处理告警
+     * 运维人员介入后调用：更新状态为处理中或已闭环，记录处理人与处理时间
+     *
+     * @param id          告警 ID
+     * @param status      目标状态（1处理中 / 2已闭环）
+     * @param handleUser  处理人
+     */
+    void handle(Long id, Integer status, String handleUser);
+
+    /**
+     * 告警统计汇总
+     * 返回各状态、各类型、各级别的告警数量，用于数据大盘
+     *
+     * @return 统计结果 Map
+     */
+    Map<String, Object> statistics();
+}
