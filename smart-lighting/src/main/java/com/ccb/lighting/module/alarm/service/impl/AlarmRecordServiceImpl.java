@@ -6,6 +6,7 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.ccb.lighting.common.BusinessException;
 import com.ccb.lighting.common.PageQuery;
 import com.ccb.lighting.common.ResultCode;
+import com.ccb.lighting.module.alarm.dto.AlarmQueryDTO;
 import com.ccb.lighting.module.alarm.entity.AlarmRecord;
 import com.ccb.lighting.module.alarm.mapper.AlarmRecordMapper;
 import com.ccb.lighting.module.alarm.service.AlarmRecordService;
@@ -55,6 +56,27 @@ public class AlarmRecordServiceImpl implements AlarmRecordService {
             throw new BusinessException(ResultCode.DATA_NOT_FOUND);
         }
         return record;
+    }
+
+    @Override
+    public IPage<AlarmRecord> pageListByQuery(AlarmQueryDTO query) {
+        LambdaQueryWrapper<AlarmRecord> wrapper = new LambdaQueryWrapper<>();
+        if(query.getAlarmType()!=null && !query.getAlarmType().isEmpty()){
+            wrapper.eq(AlarmRecord::getAlarmType,query.getAlarmType());
+        }
+        if(query.getAlarmLevel()!=null){
+            wrapper.eq(AlarmRecord::getAlarmLevel,query.getAlarmLevel());
+        }
+        if(query.getStatus()!=null){
+            wrapper.eq(AlarmRecord::getStatus,query.getStatus());
+        }
+
+        wrapper.orderByDesc(AlarmRecord::getAlarmTime);
+        return alarmRecordMapper.selectPage(
+                new Page<>(query.getCurrent(), query.getSize()),
+                wrapper
+        );
+
     }
 
     /**

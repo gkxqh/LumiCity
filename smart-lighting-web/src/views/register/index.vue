@@ -1,7 +1,8 @@
 <!--
   注册页
   - 与登录页风格一致：居中卡片 + 渐变背景
-  - 字段对齐后端 RegisterDTO：username、password、confirmPassword、phone、email
+  - 字段对齐后端 RegisterDTO：username、password、confirmPassword、nickname、phone、email
+  - nickname/phone/email 为必填项
 -->
 <template>
   <div class="register-container">
@@ -46,10 +47,19 @@
           />
         </el-form-item>
 
+        <el-form-item prop="nickname">
+          <el-input
+            v-model="form.nickname"
+            placeholder="请输入昵称"
+            :prefix-icon="UserFilled"
+            clearable
+          />
+        </el-form-item>
+
         <el-form-item prop="phone">
           <el-input
             v-model="form.phone"
-            placeholder="手机号（选填）"
+            placeholder="请输入手机号"
             :prefix-icon="Phone"
             clearable
           />
@@ -58,7 +68,7 @@
         <el-form-item prop="email">
           <el-input
             v-model="form.email"
-            placeholder="邮箱（选填）"
+            placeholder="请输入邮箱"
             :prefix-icon="Message"
             clearable
           />
@@ -87,7 +97,7 @@
 import { ref, reactive } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { User, Lock, Phone, Message } from '@element-plus/icons-vue'
+import { User, Lock, Phone, Message, UserFilled } from '@element-plus/icons-vue'
 import { register } from '@/api/auth'
 
 const router = useRouter()
@@ -98,6 +108,7 @@ const form = reactive({
   username: '',
   password: '',
   confirmPassword: '',
+  nickname: '',
   phone: '',
   email: ''
 })
@@ -123,6 +134,17 @@ const rules = {
   confirmPassword: [
     { required: true, message: '请确认密码', trigger: 'blur' },
     { validator: validateConfirmPassword, trigger: 'blur' }
+  ],
+  nickname: [
+    { required: true, message: '请输入昵称', trigger: 'blur' }
+  ],
+  phone: [
+    { required: true, message: '请输入手机号', trigger: 'blur' },
+    { pattern: /^1[3-9]\d{9}$/, message: '手机号格式不正确', trigger: 'blur' }
+  ],
+  email: [
+    { required: true, message: '请输入邮箱', trigger: 'blur' },
+    { type: 'email', message: '邮箱格式不正确', trigger: 'blur' }
   ]
 }
 

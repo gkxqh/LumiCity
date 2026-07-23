@@ -98,6 +98,7 @@ public class AuthServiceImpl implements AuthService {
         SysUser user = new SysUser();
         user.setUsername(registerDTO.getUsername());
         user.setPassword(DigestUtils.md5DigestAsHex(registerDTO.getPassword().getBytes()));
+        user.setNickname(registerDTO.getNickname());
         user.setPhone(registerDTO.getPhone());
         user.setEmail(registerDTO.getEmail());
         user.setStatus(1);

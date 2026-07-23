@@ -2,6 +2,7 @@ package com.ccb.lighting.module.alarm.service;
 
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.ccb.lighting.common.PageQuery;
+import com.ccb.lighting.module.alarm.dto.AlarmQueryDTO;
 import com.ccb.lighting.module.alarm.entity.AlarmRecord;
 
 import java.util.Map;
@@ -32,6 +33,8 @@ public interface AlarmRecordService {
      * @return 告警记录
      */
     AlarmRecord getById(Long id);
+
+    IPage<AlarmRecord> pageListByQuery(AlarmQueryDTO query);
 
     /**
      * 处理告警

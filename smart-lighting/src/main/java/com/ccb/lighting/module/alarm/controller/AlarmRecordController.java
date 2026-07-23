@@ -3,6 +3,7 @@ package com.ccb.lighting.module.alarm.controller;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.ccb.lighting.common.PageQuery;
 import com.ccb.lighting.common.Result;
+import com.ccb.lighting.module.alarm.dto.AlarmQueryDTO;
 import com.ccb.lighting.module.alarm.entity.AlarmRecord;
 import com.ccb.lighting.module.alarm.service.AlarmRecordService;
 import lombok.RequiredArgsConstructor;
@@ -35,16 +36,6 @@ public class AlarmRecordController {
     /** 告警记录 Service，构造器注入 */
     private final AlarmRecordService alarmRecordService;
 
-    /**
-     * 分页查询告警列表
-     *
-     * @param query 分页参数
-     * @return 分页数据
-     */
-    @GetMapping("/page")
-    public Result<IPage<AlarmRecord>> page(PageQuery query) {
-        return Result.success(alarmRecordService.pageList(query));
-    }
 
     /**
      * 根据 id 查询告警详情
@@ -55,6 +46,15 @@ public class AlarmRecordController {
     @GetMapping("/{id}")
     public Result<AlarmRecord> getById(@PathVariable Long id) {
         return Result.success(alarmRecordService.getById(id));
+    }
+
+    /**
+     * 页面查询告警
+     * 返回值：告警记录
+     */
+    @GetMapping("/page")
+    public Result<IPage<AlarmRecord>>page(AlarmQueryDTO query){
+        return Result.success(alarmRecordService.pageListByQuery(query));
     }
 
     /**

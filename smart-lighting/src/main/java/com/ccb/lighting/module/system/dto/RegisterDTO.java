@@ -21,8 +21,13 @@ public class RegisterDTO implements Serializable {
     @NotBlank(message = "确认密码不能为空")
     private String confirmPassword;
 
+    @NotBlank(message = "昵称不能为空")
+    private String nickname;
+
+    @NotBlank(message = "手机号不能为空")
     private String phone;
 
+    @NotBlank(message = "邮箱不能为空")
     private String email;
 
 }
