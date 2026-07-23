@@ -1,1 +1,0 @@
-import{s as t}from"./request-Dsqc547o.js";function e(o){return t({url:"/auth/login",method:"post",data:o})}function u(){return t({url:"/auth/logout",method:"post"})}function n(){return t({url:"/auth/info",method:"get"})}function s(o){return t({url:"/auth/register",method:"post",data:o})}export{u as a,n as g,e as l,s as r};
