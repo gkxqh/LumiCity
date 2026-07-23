@@ -52,6 +52,9 @@
         <el-form-item>
           <el-button type="primary" :icon="Search" @click="handleSearch">查询</el-button>
           <el-button :icon="Refresh" @click="handleReset">重置</el-button>
+          <el-button type="warning" :icon="Bell" @click="handleMockAlarm" :loading="mocking">
+            模拟告警
+          </el-button>
         </el-form-item>
       </el-form>
     </el-card>
@@ -146,10 +149,11 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted } from 'vue'
-import { ElMessage } from 'element-plus'
-import { Search, Refresh, Edit } from '@element-plus/icons-vue'
-import { pageAlarm, handleAlarm } from '@/api/other'
+import { ref, reactive, onMounted, onUnmounted } from 'vue'
+import { ElMessage, ElNotification } from 'element-plus'
+import { Search, Refresh, Edit, Bell } from '@element-plus/icons-vue'
+import { pageAlarm, addAlarm, handleAlarm } from '@/api/other'
+import { connectAlarmWS, onAlarmMessage, disconnectAlarmWS } from '@/api/ws'
 
 /* ---------------- 字典数据 ---------------- */
 
@@ -287,10 +291,66 @@ async function handleSubmit() {
   }
 }
 
+/* ---------------- WebSocket 实时推送 ---------------- */
+
+// 告警类型/级别中文映射（供通知文案用）
+const levelText = { 1: '严重', 2: '重要', 3: '一般' }
+const typeText = { OFFLINE: '离线告警', OVERVOLTAGE: '过压告警', OVERCURRENT: '过流告警', ABNORMAL: '其他异常' }
+
+let unsubAlarm = null
+
+function onAlarmWsMessage(msg) {
+  if (!msg || !msg.event) return
+  if (msg.event === 'alarm_new') {
+    const d = msg.data || {}
+    ElNotification({
+      title: `新告警 · ${typeText[d.alarmType] || d.alarmType || ''}（${levelText[d.alarmLevel] || ''}）`,
+      message: d.alarmContent || `设备 ${d.deviceId} 触发告警`,
+      type: 'error',
+      duration: 6000
+    })
+    // 收到新告警：回到第一页刷新，确保最新告警可见
+    query.current = 1
+    loadData()
+  } else if (msg.event === 'alarm_handled') {
+    // 告警状态变更：静默刷新当前页
+    loadData()
+  }
+}
+
+/* ---------------- 模拟告警（演示用） ---------------- */
+
+const mocking = ref(false)
+async function handleMockAlarm() {
+  const types = ['OFFLINE', 'OVERVOLTAGE', 'OVERCURRENT', 'ABNORMAL']
+  const levels = [1, 2, 3]
+  const atype = types[Math.floor(Math.random() * types.length)]
+  const level = levels[Math.floor(Math.random() * levels.length)]
+  mocking.value = true
+  try {
+    await addAlarm({
+      deviceId: 'D-MOCK-' + Math.floor(Math.random() * 9000 + 1000),
+      alarmType: atype,
+      alarmLevel: level,
+      alarmContent: `模拟${typeText[atype]}：用于演示 WebSocket 实时推送`
+    })
+    ElMessage.success('已触发模拟告警，观察实时推送')
+  } finally {
+    mocking.value = false
+  }
+}
+
 /* ---------------- 初始化 ---------------- */
 
 onMounted(() => {
   loadData()
+  connectAlarmWS()
+  unsubAlarm = onAlarmMessage(onAlarmWsMessage)
+})
+
+onUnmounted(() => {
+  if (unsubAlarm) unsubAlarm()
+  disconnectAlarmWS()
 })
 </script>
 
