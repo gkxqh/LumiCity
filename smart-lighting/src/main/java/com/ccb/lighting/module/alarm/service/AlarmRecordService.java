@@ -19,6 +19,14 @@ import java.util.Map;
 public interface AlarmRecordService {
 
     /**
+     * 新增告警记录
+     * 设备发生异常时由系统调用（或手动触发模拟），入库后通过 WebSocket 广播给所有在线客户端。
+     *
+     * @param record 告警记录（alarmTime/status 未传时自动填充）
+     */
+    void add(AlarmRecord record);
+
+    /**
      * 分页查询告警记录
      *
      * @param query 分页参数

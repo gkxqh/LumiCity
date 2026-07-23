@@ -6,6 +6,7 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.ccb.lighting.common.BusinessException;
 import com.ccb.lighting.common.PageQuery;
 import com.ccb.lighting.common.ResultCode;
+import com.ccb.lighting.handler.AlarmWebSocketHandler;
 import com.ccb.lighting.module.alarm.dto.AlarmQueryDTO;
 import com.ccb.lighting.module.alarm.entity.AlarmRecord;
 import com.ccb.lighting.module.alarm.mapper.AlarmRecordMapper;
@@ -31,6 +32,27 @@ public class AlarmRecordServiceImpl implements AlarmRecordService {
 
     /** 告警记录 Mapper，构造器注入 */
     private final AlarmRecordMapper alarmRecordMapper;
+
+    /** 告警 WebSocket 处理器，构造器注入，用于实时推送 */
+    private final AlarmWebSocketHandler alarmWebSocketHandler;
+
+    /**
+     * 新增告警记录
+     * 入库后通过 WebSocket 广播 "alarm_new" 事件给所有在线客户端。
+     */
+    @Override
+    public void add(AlarmRecord record) {
+        // 默认值填充：告警时间缺省取当前；状态缺省为 0 未处理
+        if (record.getAlarmTime() == null) {
+            record.setAlarmTime(LocalDateTime.now());
+        }
+        if (record.getStatus() == null) {
+            record.setStatus(0);
+        }
+        alarmRecordMapper.insert(record);
+        // 实时推送（时间字段转字符串，避免 LocalDateTime 序列化差异）
+        alarmWebSocketHandler.broadcast(buildMessage("alarm_new", record));
+    }
 
     /**
      * 分页查询告警记录
@@ -99,6 +121,8 @@ public class AlarmRecordServiceImpl implements AlarmRecordService {
         record.setHandleUser(handleUser);
         record.setHandleTime(LocalDateTime.now());
         alarmRecordMapper.updateById(record);
+        // 实时推送状态变更
+        alarmWebSocketHandler.broadcast(buildMessage("alarm_handled", record));
     }
 
     /**
@@ -128,5 +152,28 @@ public class AlarmRecordServiceImpl implements AlarmRecordService {
         result.put("closed", closed);
         result.put("total", total);
         return result;
+    }
+
+    /**
+     * 构造 WebSocket 推送消息体
+     * 结构：{ event: "alarm_new"/"alarm_handled", data: { id, deviceId, alarmType, ... }, time }
+     * 时间字段统一转字符串，避免 LocalDateTime 在不同 Jackson 配置下序列化不一致。
+     */
+    private Map<String, Object> buildMessage(String event, AlarmRecord record) {
+        Map<String, Object> data = new HashMap<>();
+        data.put("id", record.getId());
+        data.put("deviceId", record.getDeviceId());
+        data.put("poleId", record.getPoleId());
+        data.put("alarmType", record.getAlarmType());
+        data.put("alarmLevel", record.getAlarmLevel());
+        data.put("alarmContent", record.getAlarmContent());
+        data.put("alarmTime", record.getAlarmTime() != null ? record.getAlarmTime().toString() : null);
+        data.put("status", record.getStatus());
+        data.put("handleUser", record.getHandleUser());
+        Map<String, Object> message = new HashMap<>();
+        message.put("event", event);
+        message.put("data", data);
+        message.put("time", LocalDateTime.now().toString());
+        return message;
     }
 }

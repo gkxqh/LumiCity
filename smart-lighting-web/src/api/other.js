@@ -12,6 +12,9 @@ export function getAlarmTrend() {
 export function pageAlarm(params) {
   return request({ url: '/alarm/page', method: 'get', params })
 }
+export function addAlarm(data) {
+  return request({ url: '/alarm', method: 'post', data })
+}
 export function handleAlarm(params) {
   return request({ url: '/alarm/handle', method: 'put', params })
 }
