@@ -3,6 +3,7 @@ package com.ccb.lighting.module.video.controller;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.ccb.lighting.common.PageQuery;
 import com.ccb.lighting.common.Result;
+import com.ccb.lighting.module.video.dto.VideoCameraQueryDTO;
 import com.ccb.lighting.module.video.entity.VideoCamera;
 import com.ccb.lighting.module.video.service.VideoCameraService;
 import jakarta.validation.Valid;
@@ -48,8 +49,8 @@ public class VideoCameraController {
      * @return 分页数据
      */
     @GetMapping("/page")
-    public Result<IPage<VideoCamera>> page(PageQuery query) {
-        return Result.success(videoCameraService.pageList(query));
+    public Result<IPage<VideoCamera>> page(VideoCameraQueryDTO query) {
+        return Result.success(videoCameraService.pageListByQuery(query));
     }
 
     /**

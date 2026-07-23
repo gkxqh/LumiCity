@@ -2,6 +2,7 @@ package com.ccb.lighting.module.video.service;
 
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.ccb.lighting.common.PageQuery;
+import com.ccb.lighting.module.video.dto.VideoCameraQueryDTO;
 import com.ccb.lighting.module.video.entity.VideoCamera;
 
 /**
@@ -31,6 +32,8 @@ public interface VideoCameraService {
      * @return 摄像头实体
      */
     VideoCamera getById(Long id);
+
+    IPage<VideoCamera> pageListByQuery(VideoCameraQueryDTO query);
 
     /**
      * 新增摄像头

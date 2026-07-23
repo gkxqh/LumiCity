@@ -6,6 +6,7 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.ccb.lighting.common.BusinessException;
 import com.ccb.lighting.common.PageQuery;
 import com.ccb.lighting.common.ResultCode;
+import com.ccb.lighting.module.video.dto.VideoCameraQueryDTO;
 import com.ccb.lighting.module.video.entity.VideoCamera;
 import com.ccb.lighting.module.video.mapper.VideoCameraMapper;
 import com.ccb.lighting.module.video.service.VideoCameraService;
@@ -47,6 +48,23 @@ public class VideoCameraServiceImpl implements VideoCameraService {
             throw new BusinessException(ResultCode.DATA_NOT_FOUND);
         }
         return camera;
+    }
+
+    @Override
+    public IPage<VideoCamera> pageListByQuery(VideoCameraQueryDTO query) {
+        LambdaQueryWrapper<VideoCamera> wrapper = new LambdaQueryWrapper<>();
+        if(query.getStatus()!=null){
+            wrapper.eq(VideoCamera::getStatus,query.getStatus());
+        }
+        if(query.getCameraName()!=null){
+            wrapper.like(VideoCamera::getCameraName,query.getCameraName());
+        }
+        wrapper.orderByDesc(VideoCamera::getCreateTime);
+        return videoCameraMapper.selectPage(
+                new Page<>(query.getCurrent(), query.getSize()),
+                wrapper
+        );
+
     }
 
     /**
