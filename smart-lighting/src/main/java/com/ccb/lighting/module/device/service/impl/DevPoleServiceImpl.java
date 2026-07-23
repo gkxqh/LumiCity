@@ -27,7 +27,7 @@ import java.util.List;
  * <p>为什么用构造器注入而不是 @Autowired 字段注入？
  * 1. 字段 final，注入后不可变，更安全
  * 2. 依赖关系一目了然，避免"循环依赖"隐患
- * 3. 不依赖 Spring 容器也能 new 出对象做单元测试（传 mock）</p>
+ * 3. 不依赖 Spring 容器也能 db_tool.py 出对象做单元测试（传 mock）</p>
  *
  * <p>为什么注入 Mapper 而不是其他 Service？
  * 业务层操作数据库要经过 Mapper，所以注入 DevPoleMapper。
@@ -72,7 +72,7 @@ public class DevPoleServiceImpl implements DevPoleService {
         // 按创建时间倒序，最新灯杆排前面
         wrapper.orderByDesc(DevPole::getCreateTime);
 
-        // 2. 执行分页查询：new Page<>(current, size)，MyBatis-Plus 自动拼 limit
+        // 2. 执行分页查询：db_tool.py Page<>(current, size)，MyBatis-Plus 自动拼 limit
         //    返回类型是 Page（实现类），但方法声明返回 IPage（接口），子类赋父类合法
         return devPoleMapper.selectPage(
                 new Page<>(query.getCurrent(), query.getSize()),

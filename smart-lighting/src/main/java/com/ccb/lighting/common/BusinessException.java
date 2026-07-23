@@ -5,7 +5,7 @@ import lombok.Getter;
 /**
  * 自定义业务异常
  * 业务逻辑出错时抛出，被全局异常处理器捕获转成 Result 返回前端
- * 用法：throw new BusinessException("设备编号已存在");
+ * 用法：throw db_tool.py BusinessException("设备编号已存在");
  */
 @Getter
 public class BusinessException extends RuntimeException {
