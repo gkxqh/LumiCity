@@ -77,8 +77,7 @@ public class AlarmRecord extends BaseEntity implements Serializable {
     /** 告警内容：人类可读的告警描述（如 "电压 250V 超出阈值 220V"） */
     private String alarmContent;
 
-    /** 告警时间：告警产生的时间点（设备上报时间或系统检测时间） */
-    @NotNull(message = "告警时间不能为空")
+    /** 告警时间：告警产生的时间点（设备上报时间或系统检测时间）。未传时由 Service 自动取当前时间 */
     private LocalDateTime alarmTime;
 
     /** 状态：0=未处理，1=处理中，2=已闭环。默认为 0 未处理 */

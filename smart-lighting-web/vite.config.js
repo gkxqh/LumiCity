@@ -15,7 +15,8 @@ export default defineConfig({
     proxy: {
       '/api': {
         target: 'http://localhost:8080',
-        changeOrigin: true
+        changeOrigin: true,
+        ws: true          // 代理 WebSocket（/api/ws/alarm → 后端 8080）
       }
     }
   }

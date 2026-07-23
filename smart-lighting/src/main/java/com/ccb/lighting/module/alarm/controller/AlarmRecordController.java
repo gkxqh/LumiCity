@@ -6,10 +6,13 @@ import com.ccb.lighting.common.Result;
 import com.ccb.lighting.module.alarm.dto.AlarmQueryDTO;
 import com.ccb.lighting.module.alarm.entity.AlarmRecord;
 import com.ccb.lighting.module.alarm.service.AlarmRecordService;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -35,6 +38,20 @@ public class AlarmRecordController {
 
     /** 告警记录 Service，构造器注入 */
     private final AlarmRecordService alarmRecordService;
+
+    /**
+     * 新增告警记录
+     * 设备发生异常时由系统调用；也可用于前端"模拟告警"按钮触发，便于演示 WebSocket 推送。
+     * 入库后 Service 会通过 WebSocket 广播 alarm_new 事件给所有在线客户端。
+     *
+     * @param record 告警信息（@Valid 校验 deviceId/alarmType/alarmLevel 必填）
+     * @return 操作结果
+     */
+    @PostMapping
+    public Result<Void> add(@Valid @RequestBody AlarmRecord record) {
+        alarmRecordService.add(record);
+        return Result.success();
+    }
 
 
     /**

@@ -73,7 +73,9 @@
 <script setup>
 import { ref, reactive, computed, onMounted, onUnmounted, nextTick } from 'vue'
 import * as echarts from 'echarts'
+import { ElNotification } from 'element-plus'
 import { getOverview, getAlarmTrend } from '@/api/other'
+import { connectAlarmWS, onAlarmMessage, disconnectAlarmWS } from '@/api/ws'
 
 /* ---------------- 指标卡片数据 ---------------- */
 
@@ -196,6 +198,26 @@ function handleResize() {
   statusChart?.resize()
 }
 
+/* ---------------- WebSocket 实时告警 ---------------- */
+
+const typeText = { OFFLINE: '离线告警', OVERVOLTAGE: '过压告警', OVERCURRENT: '过流告警', ABNORMAL: '其他异常' }
+const levelText = { 1: '严重', 2: '重要', 3: '一般' }
+let unsubAlarm = null
+
+function onAlarmWsMessage(msg) {
+  if (!msg || msg.event !== 'alarm_new') return
+  const d = msg.data || {}
+  ElNotification({
+    title: `新告警 · ${typeText[d.alarmType] || ''}（${levelText[d.alarmLevel] || ''}）`,
+    message: d.alarmContent || `设备 ${d.deviceId} 触发告警`,
+    type: 'error',
+    duration: 6000
+  })
+  // 待处理告警数 +1 并重新拉取概览（同步在线率等）
+  overview.alarmPending = (overview.alarmPending || 0) + 1
+  loadOverview()
+}
+
 /* ---------------- 生命周期 ---------------- */
 
 onMounted(async () => {
@@ -214,6 +236,9 @@ onMounted(async () => {
   updateStatusChart()
   // 监听窗口变化
   window.addEventListener('resize', handleResize)
+  // 连接告警 WebSocket
+  connectAlarmWS()
+  unsubAlarm = onAlarmMessage(onAlarmWsMessage)
 })
 
 onUnmounted(() => {
@@ -223,6 +248,9 @@ onUnmounted(() => {
   statusChart?.dispose()
   alarmChart = null
   statusChart = null
+  // 断开 WebSocket
+  if (unsubAlarm) unsubAlarm()
+  disconnectAlarmWS()
 })
 </script>
 

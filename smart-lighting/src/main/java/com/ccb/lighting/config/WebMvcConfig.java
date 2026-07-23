@@ -24,6 +24,7 @@ public class WebMvcConfig implements WebMvcConfigurer {
                 .addPathPatterns("/**")
                 .excludePathPatterns(
                         "/auth/**",            // 登录接口不拦截
+                        "/ws/**",              // WebSocket 握手端点（鉴权交由 AlarmHandshakeInterceptor）
                         "/swagger-ui.html",    // Swagger UI 入口（重定向页）
                         "/swagger-ui/**",      // Swagger UI 静态资源
                         "/v3/api-docs/**",     // API 文档 JSON
