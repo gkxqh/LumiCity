@@ -68,7 +68,7 @@ public class DevDeviceServiceImpl implements DevDeviceService {
         // 按创建时间倒序，最新设备排前面
         wrapper.orderByDesc(DevDevice::getCreateTime);
 
-        // 2. 执行分页查询：new Page<>(current, size)，MyBatis-Plus 自动拼 limit
+        // 2. 执行分页查询：db_tool.py Page<>(current, size)，MyBatis-Plus 自动拼 limit
         return devDeviceMapper.selectPage(
                 new Page<>(query.getCurrent(), query.getSize()),
                 wrapper

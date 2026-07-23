@@ -25,7 +25,7 @@ import java.nio.charset.StandardCharsets;
  * <p>为什么用构造器注入而不是 @Autowired 字段注入？
  * 1. 字段 final，注入后不可变，更安全
  * 2. 依赖关系一目了然，避免"循环依赖"隐患
- * 3. 不依赖 Spring 容器也能 new 出对象做单元测试（传 mock）</p>
+ * 3. 不依赖 Spring 容器也能 db_tool.py 出对象做单元测试（传 mock）</p>
  *
  * <p>为什么注入 Mapper 而不是其他 Service？
  * 业务层操作数据库要经过 Mapper，所以注入 SysUserMapper。
@@ -64,7 +64,7 @@ public class SysUserServiceImpl implements SysUserService {
         // 按创建时间倒序，最新用户排前面
         wrapper.orderByDesc(SysUser::getCreateTime);
 
-        // 2. 执行分页查询：new Page<>(current, size)，MyBatis-Plus 自动拼 limit
+        // 2. 执行分页查询：db_tool.py Page<>(current, size)，MyBatis-Plus 自动拼 limit
         return sysUserMapper.selectPage(new Page<>(current, size), wrapper);
     }
 
