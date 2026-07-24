@@ -49,6 +49,14 @@ ALARM_LEVELS = [1, 2, 3]
 ALARM_LEVEL_WEIGHTS = [20, 30, 50]
 ALARM_STATUS = [0, 1, 2]  # 未处理/处理中/已闭环
 ALARM_STATUS_WEIGHTS = [20, 25, 55]
+HANDLE_RESULTS = [
+    "已现场排查并复位，设备恢复正常",
+    "更换故障模块后恢复，已记录备件更换",
+    "远程重启设备后告警消除",
+    "现场巡检确认误报，已闭环",
+    "联系厂商技术支持后处理完毕",
+    "调整阈值参数后告警不再触发",
+]
 
 ORDER_TYPES = ["INSPECT", "REPAIR"]
 ORDER_STATUS = [0, 1, 2, 3]  # 待处理/处理中/已完成/已验收
@@ -283,17 +291,21 @@ class DataGenerator:
                 "OVERCURRENT": f"设备 {dev['code']} 电流异常",
                 "ABNORMAL": f"设备 {dev['code']} 运行参数异常",
             }
-            handle_time = handle_user = None
-            if status != 0:
-                handle_time = alarm_time + timedelta(minutes=random.randint(10, 600))
+            handle_user = handle_time = handle_result = None
+            if status in (1, 2):
+                # 处理中 / 已闭环 均已分配处理人
                 handle_user = random.choice(users)[1] if users else "admin"
+            if status == 2:
+                # 已闭环：填写处理意见 + 完成时间
+                handle_time = alarm_time + timedelta(minutes=random.randint(10, 600))
+                handle_result = random.choice(HANDLE_RESULTS)
             self._insert(
                 "alarm_record",
                 ["device_id", "pole_id", "alarm_type", "alarm_level", "alarm_content",
-                 "alarm_time", "status", "handle_time", "handle_user", "create_time",
-                 "update_time", "create_by", "update_by", "deleted"],
+                 "alarm_time", "status", "handle_user", "handle_time", "handle_result",
+                 "create_time", "update_time", "create_by", "update_by", "deleted"],
                 (dev["code"], dev["pole_id"], atype, level, content_map[atype],
-                 alarm_time, status, handle_time, handle_user, *self._audit()),
+                 alarm_time, status, handle_user, handle_time, handle_result, *self._audit()),
             )
             rows += 1
         self.conn.commit()

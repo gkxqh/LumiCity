@@ -108,19 +108,39 @@ def start_mysql():
         logs.append(f"✓ MySQL 端口 {cfg['host']}:{cfg['port']} 已开放，疑似正在运行")
         return jsonify({"ok": True, "logs": logs})
 
-    brew = shutil.which("brew") or shutil.which("brew",
-        path="/opt/homebrew/bin:/usr/local/bin")
+    import platform
+    is_win = platform.system() == "Windows"
+
     candidates = []
-    if brew:
-        candidates += [[brew, "services", "start", "mysql"],
-                       [brew, "services", "start", "mysql@8.0"]]
-    candidates += [["mysql.server", "start"],
-                   ["/usr/local/mysql/support-files/mysql.server", "start"]]
+    if is_win:
+        # Windows: 尝试通过服务启动
+        candidates += [["net", "start", "mysql"],
+                       ["net", "start", "mysql80"],
+                       ["net", "start", "mysql84"],
+                       ["net", "start", "MySQL80"],
+                       ["net", "start", "MySQL"]]
+        # 尝试通过 mysqld 直接启动
+        mysqld = shutil.which("mysqld")
+        if mysqld:
+            candidates.append([mysqld, "--console"])
+    else:
+        # macOS / Linux
+        brew = shutil.which("brew") or shutil.which("brew",
+            path="/opt/homebrew/bin:/usr/local/bin")
+        if brew:
+            candidates += [[brew, "services", "start", "mysql"],
+                           [brew, "services", "start", "mysql@8.0"]]
+        candidates += [["mysql.server", "start"],
+                       ["/usr/local/mysql/support-files/mysql.server", "start"],
+                       ["sudo", "systemctl", "start", "mysql"],
+                       ["sudo", "systemctl", "start", "mysqld"]]
+
     started = False
     for cmd in candidates:
         try:
             logs.append(f"尝试执行: {' '.join(cmd)}")
-            r = subprocess.run(cmd, capture_output=True, text=True, timeout=25)
+            r = subprocess.run(cmd, capture_output=True, text=True, timeout=25,
+                               shell=is_win)
             out = (r.stdout or "") + (r.stderr or "")
             if out.strip():
                 logs.append(out.strip()[:400])
@@ -136,7 +156,9 @@ def start_mysql():
         except Exception as e:
             logs.append(f"执行出错: {e}")
     if not started:
-        logs.append("✗ 自动启动未成功，请手动启动 MySQL（如 brew services start mysql）")
+        hint = "请手动启动 MySQL（Windows: 打开服务管理器启动 MySQL 服务）" if is_win \
+            else "请手动启动 MySQL（如 brew services start mysql）"
+        logs.append(f"✗ 自动启动未成功，{hint}")
     return jsonify({"ok": started, "logs": logs})
 
 

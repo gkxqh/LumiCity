@@ -3,7 +3,11 @@
   - 顶部搜索栏：告警类型 / 状态 / 查询
   - 中间表格：设备名称、告警类型、告警级别(Tag)、告警内容、告警时间、状态、操作
   - 底部分页
-  - 处理弹窗：填写处理意见，调 handleAlarm
+  - 处理流程（两步骤闭环）：
+      未处理(0) →[分配处理人]→ 处理中(1) →[编写处理意见]→ 已闭环(2) →[查看结果]
+    - 分配处理人：填写 handleUser，后端置 status=1（处理中），不填完成时间
+    - 编写处理意见：填写 handleResult，后端置 status=2（已闭环）并记完成时间
+    - 查看结果：只读展示 告警时间 / 完成时间 / 处理人 / 处理结果
 
   字段对齐后端 AlarmRecord 实体：
   - alarmType 是 String 枚举：OFFLINE/OVERVOLTAGE/OVERCURRENT/ABNORMAL
@@ -85,16 +89,34 @@
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="120" fixed="right" align="center">
+        <el-table-column label="操作" width="170" fixed="right" align="center">
           <template #default="{ row }">
             <el-button
+              v-if="row.status === 0"
               type="primary"
               link
               :icon="Edit"
-              :disabled="row.status !== 0"
+              @click="openAssign(row)"
+            >
+              分配处理人
+            </el-button>
+            <el-button
+              v-else-if="row.status === 1"
+              type="warning"
+              link
+              :icon="Edit"
               @click="openHandle(row)"
             >
-              处理
+              编写处理意见
+            </el-button>
+            <el-button
+              v-else
+              type="info"
+              link
+              :icon="View"
+              @click="openView(row)"
+            >
+              查看结果
             </el-button>
           </template>
         </el-table-column>
@@ -114,10 +136,10 @@
       />
     </el-card>
 
-    <!-- ============ 处理弹窗 ============ -->
+    <!-- ============ 处理/查看弹窗 ============ -->
     <el-dialog
       v-model="dialogVisible"
-      title="处理告警"
+      :title="dialogTitle"
       width="520px"
       @closed="resetForm"
     >
@@ -128,20 +150,55 @@
         <el-form-item label="告警内容">
           <el-input :model-value="form.alarmContent" type="textarea" :rows="2" disabled />
         </el-form-item>
-        <el-form-item label="处理意见" prop="handleRemark">
-          <el-input
-            v-model="form.handleRemark"
-            type="textarea"
-            :rows="4"
-            placeholder="请填写处理意见 / 处置过程"
-          />
-        </el-form-item>
+
+        <!-- 模式一：分配处理人（未处理 → 处理中） -->
+        <template v-if="dialogMode === 'assign'">
+          <el-form-item label="处理人" prop="handleUser">
+            <el-input
+              v-model="form.handleUser"
+              placeholder="请输入处理人姓名 / 工号"
+            />
+          </el-form-item>
+        </template>
+
+        <!-- 模式二：编写处理意见（处理中 → 已闭环） -->
+        <template v-if="dialogMode === 'handle'">
+          <el-form-item label="处理意见" prop="handleRemark">
+            <el-input
+              v-model="form.handleRemark"
+              type="textarea"
+              :rows="4"
+              placeholder="请填写处理意见 / 处置过程"
+            />
+          </el-form-item>
+        </template>
+
+        <!-- 模式三：查看处理结果（已闭环，只读） -->
+        <template v-if="dialogMode === 'view'">
+          <el-form-item label="告警时间">
+            <el-input :model-value="form.alarmTime" disabled />
+          </el-form-item>
+          <el-form-item label="完成时间">
+            <el-input :model-value="form.handleTime" disabled />
+          </el-form-item>
+          <el-form-item label="处理人">
+            <el-input :model-value="form.handleUser" disabled />
+          </el-form-item>
+          <el-form-item label="处理结果">
+            <el-input :model-value="form.handleResult" type="textarea" :rows="3" disabled />
+          </el-form-item>
+        </template>
       </el-form>
 
       <template #footer>
         <el-button @click="dialogVisible = false">取 消</el-button>
-        <el-button type="primary" :loading="submitting" @click="handleSubmit">
-          确认处理
+        <el-button
+          v-if="dialogMode !== 'view'"
+          type="primary"
+          :loading="submitting"
+          @click="handleSubmit"
+        >
+          确认
         </el-button>
       </template>
     </el-dialog>
@@ -149,9 +206,9 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted, onUnmounted } from 'vue'
+import { ref, reactive, computed, onMounted, onUnmounted } from 'vue'
 import { ElMessage, ElNotification } from 'element-plus'
-import { Search, Refresh, Edit, Bell } from '@element-plus/icons-vue'
+import { Search, Refresh, Edit, Bell, View } from '@element-plus/icons-vue'
 import { pageAlarm, addAlarm, handleAlarm } from '@/api/other'
 import { connectAlarmWS, onAlarmMessage, disconnectAlarmWS } from '@/api/ws'
 
@@ -231,43 +288,90 @@ function handleReset() {
   loadData()
 }
 
-/* ---------------- 处理弹窗 ---------------- */
+/* ---------------- 处理弹窗（三模式） ---------------- */
 
 const dialogVisible = ref(false)
+const dialogMode = ref('assign')          // assign=分配处理人 / handle=编写处理意见 / view=查看结果
 const submitting = ref(false)
 const formRef = ref()
+
+const dialogTitle = computed(() => ({
+  assign: '分配处理人',
+  handle: '编写处理意见',
+  view: '处理结果'
+}[dialogMode.value]))
 
 // 弹窗表单数据：字段名对齐后端 AlarmRecord 实体
 const form = reactive({
   id: null,
   deviceName: '',
   alarmContent: '',
-  handleRemark: ''
+  handleUser: '',     // 处理人（分配阶段写入 handle_user）
+  handleRemark: '',   // 处理意见（闭环阶段写入 handle_result）
+  alarmTime: '',      // 查看阶段展示
+  handleTime: '',     // 查看阶段展示（完成时间）
+  handleResult: ''    // 查看阶段展示（处理结果）
 })
 
-const formRules = {
-  handleRemark: [{ required: true, message: '请输入处理意见', trigger: 'blur' }]
-}
+// 校验规则随模式变化：分配阶段校验处理人，编写阶段校验处理意见
+const formRules = computed(() => {
+  if (dialogMode.value === 'assign') {
+    return { handleUser: [{ required: true, message: '请输入处理人', trigger: 'blur' }] }
+  }
+  if (dialogMode.value === 'handle') {
+    return { handleRemark: [{ required: true, message: '请输入处理意见', trigger: 'blur' }] }
+  }
+  return {}
+})
 
 // 重置表单（弹窗关闭时触发）
 function resetForm() {
   form.id = null
   form.deviceName = ''
   form.alarmContent = ''
+  form.handleUser = ''
   form.handleRemark = ''
+  form.alarmTime = ''
+  form.handleTime = ''
+  form.handleResult = ''
   formRef.value?.clearValidate()
 }
 
-// 打开处理弹窗：回填当前行信息
+// 打开「分配处理人」：未处理(0) → 处理中(1)
+function openAssign(row) {
+  resetForm()
+  form.id = row.id
+  form.deviceName = row.deviceName
+  form.alarmContent = row.alarmContent
+  dialogMode.value = 'assign'
+  dialogVisible.value = true
+}
+
+// 打开「编写处理意见」：处理中(1) → 已闭环(2)
 function openHandle(row) {
   resetForm()
   form.id = row.id
   form.deviceName = row.deviceName
   form.alarmContent = row.alarmContent
+  dialogMode.value = 'handle'
   dialogVisible.value = true
 }
 
-// 提交处理
+// 打开「查看结果」：已闭环(2) 只读展示
+function openView(row) {
+  resetForm()
+  form.id = row.id
+  form.deviceName = row.deviceName
+  form.alarmContent = row.alarmContent
+  form.alarmTime = row.alarmTime
+  form.handleTime = row.handleTime
+  form.handleUser = row.handleUser
+  form.handleResult = row.handleResult
+  dialogMode.value = 'view'
+  dialogVisible.value = true
+}
+
+// 提交：按当前模式走不同分支，绝不再把意见错写进处理人、也不再一步跳到已闭环
 async function handleSubmit() {
   // 1. 表单校验
   try {
@@ -275,15 +379,26 @@ async function handleSubmit() {
   } catch {
     return
   }
-  // 2. 调用 handleAlarm 接口
+  // 2. 按模式调用 handleAlarm 接口
   submitting.value = true
   try {
-    await handleAlarm({
-      id: form.id,
-      status: 2,
-      handleUser: form.handleRemark
-    })
-    ElMessage.success('处理成功')
+    if (dialogMode.value === 'assign') {
+      // 分配处理人：status=1，写入 handleUser
+      await handleAlarm({
+        id: form.id,
+        status: 1,
+        handleUser: form.handleUser
+      })
+      ElMessage.success('已分配处理人，告警进入处理中')
+    } else if (dialogMode.value === 'handle') {
+      // 编写处理意见：status=2，写入 handleResult（后端记录完成时间）
+      await handleAlarm({
+        id: form.id,
+        status: 2,
+        handleResult: form.handleRemark
+      })
+      ElMessage.success('处理完成，告警已闭环')
+    }
     dialogVisible.value = false
     loadData()
   } finally {
