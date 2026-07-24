@@ -19,7 +19,8 @@ const routes = [
       { path: 'environment', name: 'Environment', meta: { title: '环境监测', icon: 'Cloudy' }, component: () => import('@/views/environment/index.vue') },
       { path: 'publish', name: 'Publish', meta: { title: '信息发布', icon: 'Film' }, component: () => import('@/views/publish/index.vue') },
       { path: 'workorder', name: 'WorkOrder', meta: { title: '工单运维', icon: 'Document' }, component: () => import('@/views/workorder/index.vue') },
-      { path: 'system', name: 'System', meta: { title: '系统管理', icon: 'Setting' }, component: () => import('@/views/system/index.vue') }
+      { path: 'system', name: 'System', meta: { title: '系统管理', icon: 'Setting' }, component: () => import('@/views/system/index.vue') },
+      { path: 'system/permission', name: 'Permission', meta: { title: '权限管理', icon: 'Lock' }, component: () => import('@/views/system/permission.vue') }
     ]
   }
 ]

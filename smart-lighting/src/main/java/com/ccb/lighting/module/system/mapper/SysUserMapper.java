@@ -3,6 +3,8 @@ package com.ccb.lighting.module.system.mapper;
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import com.ccb.lighting.module.system.entity.SysRole;
 import com.ccb.lighting.module.system.entity.SysUser;
+import org.apache.ibatis.annotations.Delete;
+import org.apache.ibatis.annotations.Insert;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 import org.apache.ibatis.annotations.Select;
@@ -37,4 +39,28 @@ public interface SysUserMapper extends BaseMapper<SysUser> {
             "INNER JOIN sys_user_role ur ON r.id = ur.role_id " +
             "WHERE ur.user_id = #{userId} AND r.deleted = 0")
     List<SysRole> selectUserRoleList(@Param("userId") Long userId);
+
+    /**
+     * 聚合某用户拥有的全部权限标识（菜单 perms）
+     *
+     * <p>链路：user → sys_user_role → role → sys_role_menu → menu，
+     * 取所有菜单的去重 perms（非空的），即该用户最终拥有的接口/按钮权限集合。</p>
+     *
+     * @param userId 用户 ID
+     * @return 权限标识列表，可能为空
+     */
+    @Select("SELECT DISTINCT m.perms FROM sys_menu m " +
+            "INNER JOIN sys_role_menu rm ON m.id = rm.menu_id " +
+            "INNER JOIN sys_user_role ur ON rm.role_id = ur.role_id " +
+            "WHERE ur.user_id = #{userId} AND m.perms IS NOT NULL AND m.deleted = 0")
+    List<String> selectUserPerms(@Param("userId") Long userId);
+
+    /** 删除某用户的全部角色关联（重新分配前调用） */
+    @Delete("DELETE FROM sys_user_role WHERE user_id = #{userId}")
+    void deleteUserRoles(@Param("userId") Long userId);
+
+    /** 给用户绑定一个角色 */
+    @Insert("INSERT INTO sys_user_role(user_id, role_id, create_time, update_time) " +
+            "VALUES(#{userId}, #{roleId}, NOW(), NOW())")
+    void insertUserRole(@Param("userId") Long userId, @Param("roleId") Long roleId);
 }

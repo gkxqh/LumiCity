@@ -36,4 +36,7 @@ public class LoginVO implements Serializable {
 
     /** 角色编码列表，用于前端权限控制 */
     private List<String> roles;
+
+    /** 权限标识列表（由角色→菜单聚合），用于后端接口级鉴权与前端按钮级控制 */
+    private List<String> perms;
 }
