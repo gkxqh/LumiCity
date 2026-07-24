@@ -2,8 +2,8 @@
   系统管理页 - 用户管理
   - 搜索栏：用户名 / 状态 / 查询 / 重置 / 新增
   - 表格：用户名、昵称、手机号、邮箱、状态、操作
-  - 新增/编辑弹窗：用户名、密码、昵称、手机号、邮箱、状态
-  - 调 pageUser / addUser / updateUser / deleteUser
+  - 新增/编辑弹窗：用户名、密码、昵称、手机号、邮箱、状态、角色(多选)
+  - 调 pageUser / addUser / updateUser / deleteUser / listRole / getUserRoles / assignUserRoles
   - 分页
 -->
 <template>
@@ -118,6 +118,23 @@
             />
           </el-select>
         </el-form-item>
+        <el-form-item label="角色" prop="roleIds">
+          <el-select
+            v-model="form.roleIds"
+            multiple
+            collapse-tags
+            collapse-tags-tooltip
+            placeholder="请为该用户分配角色"
+            style="width: 100%"
+          >
+            <el-option
+              v-for="item in roleOptions"
+              :key="item.id"
+              :label="item.roleName"
+              :value="item.id"
+            />
+          </el-select>
+        </el-form-item>
       </el-form>
 
       <template #footer>
@@ -133,6 +150,7 @@ import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Search, Refresh, Plus, Edit, Delete } from '@element-plus/icons-vue'
 import { pageUser, addUser, updateUser, deleteUser } from '@/api/other'
+import { listRole, getUserRoles, assignUserRoles } from '@/api/system'
 
 /* ---------------- 字典数据 ---------------- */
 
@@ -180,6 +198,9 @@ const tableData = ref([])
 const total = ref(0)
 const loading = ref(false)
 
+// 角色下拉选项：供用户编辑弹窗分配角色（onMounted 时拉取启用角色）
+const roleOptions = ref([])
+
 async function loadData() {
   loading.value = true
   try {
@@ -219,7 +240,8 @@ const form = reactive({
   nickname: '',
   phone: '',
   email: '',
-  status: 1  // 对齐后端 Integer status（0禁用 1启用）
+  status: 1,  // 对齐后端 Integer status（0禁用 1启用）
+  roleIds: []  // 用户绑定的角色 ID 列表（提交时单独走 assignUserRoles，不随 SysUser 入库）
 })
 
 // 表单校验规则（密码在编辑时可为空）
@@ -256,6 +278,7 @@ function resetForm() {
   form.phone = ''
   form.email = ''
   form.status = 1
+  form.roleIds = []
   formRef.value?.clearValidate()
 }
 
@@ -279,6 +302,10 @@ function openEdit(row) {
     email: row.email || '',
     status: row.status
   })
+  // 回填该用户已绑定的角色 ID 列表
+  getUserRoles(row.id)
+    .then(res => { form.roleIds = res.data || [] })
+    .catch(() => { form.roleIds = [] })
   dialogVisible.value = true
 }
 
@@ -291,14 +318,25 @@ async function handleSubmit() {
   }
   submitting.value = true
   try {
+    // 提交给后端的用户对象不带 roleIds（SysUser 无此字段，角色单独走绑定接口）
+    const { roleIds, ...userPayload } = form
     if (form.id) {
-      // 编辑：如果密码留空，则不传 password 字段
-      const payload = { ...form }
-      if (!payload.password) delete payload.password
-      await updateUser(payload)
+      // 编辑：密码留空则不传 password
+      if (!userPayload.password) delete userPayload.password
+      await updateUser(userPayload)
+      // 重新分配角色（先删后插，传空数组即清空）
+      await assignUserRoles(form.id, roleIds || [])
       ElMessage.success('修改成功')
     } else {
-      await addUser({ ...form })
+      await addUser(userPayload)
+      // 新增后需拿到新用户 id 才能分配角色：按用户名精确查一条
+      const res = await pageUser({ current: 1, size: 1, username: form.username })
+      const newId = res.data?.records?.[0]?.id
+      if (newId) {
+        await assignUserRoles(newId, roleIds || [])
+      } else {
+        ElMessage.warning('用户已创建，可在编辑中补充角色')
+      }
       ElMessage.success('新增成功')
     }
     dialogVisible.value = false
@@ -325,6 +363,10 @@ async function handleDelete(row) {
 
 onMounted(() => {
   loadData()
+  // 加载启用状态的角色，供用户编辑弹窗下拉选择
+  listRole({ status: 1 })
+    .then(res => { roleOptions.value = res.data || [] })
+    .catch(() => {})
 })
 </script>
 

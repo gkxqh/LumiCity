@@ -6,6 +6,7 @@ import lombok.Data;
 import lombok.EqualsAndHashCode;
 
 import java.io.Serializable;
+import java.util.List;
 
 /**
  * 系统菜单实体 SysMenu
@@ -59,6 +60,11 @@ public class SysMenu extends BaseEntity implements Serializable {
     /** 图标：菜单左侧图标名，前端图标库的名称 */
     private String icon;
 
-    /** 排序号：同级菜单按此字段升序排列，越小越靠前 */
+    /** 排序号：同级菜单按此字段升序排列，越小越靠前（数据库列名 sort） */
+    @com.baomidou.mybatisplus.annotation.TableField("sort")
     private Integer orderNum;
+
+    /** 子菜单列表（树形展示用，数据库无此列） */
+    @com.baomidou.mybatisplus.annotation.TableField(exist = false)
+    private List<SysMenu> children;
 }
