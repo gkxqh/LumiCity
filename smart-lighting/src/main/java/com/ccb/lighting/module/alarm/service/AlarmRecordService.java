@@ -44,15 +44,15 @@ public interface AlarmRecordService {
 
     IPage<AlarmRecord> pageListByQuery(AlarmQueryDTO query);
 
-    /**
-     * 处理告警
-     * 运维人员介入后调用：更新状态为处理中或已闭环，记录处理人与处理时间
+     /**
+     * 处理告警(分配处理人)
+     * 运维人员介入后调用：更新状态为处理中，记录处理人与处理时间
      *
      * @param id          告警 ID
      * @param status      目标状态（1处理中 / 2已闭环）
      * @param handleUser  处理人
      */
-    void handle(Long id, Integer status, String handleUser);
+    void handle(Long id, Integer status, String handleUser, String handleResult);
 
     /**
      * 告警统计汇总

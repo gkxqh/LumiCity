@@ -75,7 +75,7 @@ public class AlarmRecordController {
     }
 
     /**
-     * 处理告警
+     * 处理告警（分配处理人）
      *
      * <p>请求示例：PUT /alarm/handle?id=100&status=2&handleUser=zhangsan
      * status=1 表示运维已接手处理中，status=2 表示已闭环。</p>
@@ -89,8 +89,9 @@ public class AlarmRecordController {
     public Result<Void> handle(
             @RequestParam Long id,
             @RequestParam Integer status,
-            @RequestParam String handleUser) {
-        alarmRecordService.handle(id, status, handleUser);
+            @RequestParam(required = false) String handleUser,
+            @RequestParam(required = false) String handleResult) {
+        alarmRecordService.handle(id, status, handleUser, handleResult);
         return Result.success();
     }
 

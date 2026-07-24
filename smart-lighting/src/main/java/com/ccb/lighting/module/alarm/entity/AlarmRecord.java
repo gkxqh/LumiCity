@@ -92,4 +92,7 @@ public class AlarmRecord extends BaseEntity implements Serializable {
 
     /** 处理人：闭环告警的运维人员用户名 */
     private String handleUser;
+
+    /** 处理结果：运维人员处理告警时填写的意见 */
+    private String handleResult;
 }

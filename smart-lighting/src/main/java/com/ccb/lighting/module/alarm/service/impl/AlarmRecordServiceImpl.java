@@ -102,12 +102,12 @@ public class AlarmRecordServiceImpl implements AlarmRecordService {
     }
 
 
-    /**
-     * 处理告警
+     /**
+     * 处理告警（分配处理人）
      * 三步：校验告警存在 → 更新状态/处理人/处理时间 → 入库
      */
     @Override
-    public void handle(Long id, Integer status, String handleUser) {
+    public void handle(Long id, Integer status, String handleUser, String handleResult) {
         // 1. 校验告警是否存在
         AlarmRecord record = alarmRecordMapper.selectById(id);
         if (record == null) {
@@ -118,9 +118,22 @@ public class AlarmRecordServiceImpl implements AlarmRecordService {
             throw new BusinessException("status 仅支持 1 处理中 或 2 已闭环");
         }
         // 3. 更新字段：状态、处理人、处理时间
-        record.setStatus(status);
-        record.setHandleUser(handleUser);
-        record.setHandleTime(LocalDateTime.now());
+        if(status == 1){
+            //不允许处理人为空
+            if(handleUser == null || handleUser.isBlank()){
+                throw new BusinessException("处理人不能为空！");
+            }
+            record.setHandleUser(handleUser);
+            record.setStatus(1);
+        } else {
+            //不允许处理结果为空
+            if(handleResult == null || handleResult.isBlank()){
+                throw new BusinessException("处理结果不能为空！");
+            }
+            record.setHandleResult(handleResult);
+            record.setHandleTime(LocalDateTime.now());
+            record.setStatus(2);
+        }
         alarmRecordMapper.updateById(record);
         // 实时推送状态变更
         alarmWebSocketHandler.broadcast(buildMessage("alarm_handled", record));
