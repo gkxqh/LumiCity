@@ -4,7 +4,9 @@ import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.ccb.lighting.common.Result;
 import com.ccb.lighting.module.device.dto.DeviceQueryDTO;
 import com.ccb.lighting.module.device.entity.DevDevice;
+import com.ccb.lighting.module.device.listener.DeviceImportListener;
 import com.ccb.lighting.module.device.service.DevDeviceService;
+import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -14,7 +16,17 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.multipart.MultipartFile;
+
+import java.io.IOException;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
+import java.util.HashMap;
+import java.util.Map;
 
 /**
  * 设备 Controller
@@ -27,13 +39,12 @@ import org.springframework.web.bind.annotation.RestController;
  * - GET    /device/{id}    查详情
  * - POST   /device         新增（请求体带数据）
  * - PUT    /device         修改
- * - DELETE /device/{id}    删除</p>
+ * - DELETE /device/{id}    删除
+ * - POST   /device/import  批量导入（上传 Excel）
+ * - GET    /device/export  批量导出（下载 Excel）</p>
  *
  * <p>Controller 层职责单一：接收参数 → 调 Service → 包装 Result 返回。
  * 不写业务逻辑，业务逻辑全在 Service 实现类里。</p>
- *
- * <p>参数校验：POST/PUT 接口加 @Valid，触发 DevDevice 实体上的 @NotBlank 校验，
- * 校验失败由全局异常处理器转成 Result 返回前端。</p>
  */
 @RestController
 @RequestMapping("/device")
@@ -48,8 +59,6 @@ public class DevDeviceController {
      *
      * <p>请求示例：GET /device/page?current=1&size=10&deviceName=路灯&deviceType=LIGHT&status=1&poleId=100
      * Spring 自动把参数绑定到 DeviceQueryDTO 对象（字段名对应），交给 Service 处理。</p>
-     *
-     * <p>用 DTO 接收而非散装参数：参数多时 DTO 更清晰，且 DTO 继承 PageQuery 自带分页字段。</p>
      *
      * @param query 查询条件（含分页参数 current/size，及业务筛选条件）
      * @return 分页数据
@@ -77,8 +86,6 @@ public class DevDeviceController {
      *
      * <p>请求体示例：{"deviceCode":"L-2024-0001","deviceName":"人民路1号路灯","deviceType":"LIGHT","poleId":100,"model":"LED-100W","vendor":"欧普","status":1}
      * Service 层会查重 deviceCode、校验 poleId 是否存在后再入库。</p>
-     *
-     * <p>@Valid：触发 DevDevice 实体上的 @NotBlank 校验，deviceCode/deviceName 为空时直接返回 400。</p>
      *
      * @param device 设备信息
      * @return 操作结果
@@ -113,5 +120,56 @@ public class DevDeviceController {
     public Result<Void> delete(@PathVariable Long id) {
         devDeviceService.delete(id);
         return Result.success();
+    }
+
+    /**
+     * 批量导入设备
+     *
+     * <p>前端通过表单上传 Excel 文件，后端使用 EasyExcel 解析并批量入库。
+     * Excel 模板格式需包含：设备编号、设备名称、设备类型、所属灯杆ID、设备型号、厂商、状态。</p>
+     *
+     * @param file 上传的 Excel 文件
+     * @return 导入结果（成功/失败数量及失败原因）
+     */
+    @PostMapping("/import")
+    public Result<Map<String, Object>> importDevices(@RequestParam("file") MultipartFile file) throws IOException {
+        // 校验文件
+        if (file == null || file.isEmpty()) {
+            return Result.error("请选择要上传的文件");
+        }
+        String filename = file.getOriginalFilename();
+        if (filename == null || (!filename.endsWith(".xlsx") && !filename.endsWith(".xls"))) {
+            return Result.error("仅支持 Excel 文件（.xlsx 或 .xls）");
+        }
+
+        // 调用 Service 导入
+        DeviceImportListener.ImportResult result = devDeviceService.importDevices(file.getInputStream());
+
+        // 封装结果
+        Map<String, Object> data = new HashMap<>();
+        data.put("successCount", result.getSuccessCount());
+        data.put("failCount", result.getFailCount());
+        data.put("failReasons", result.getFailReasons());
+
+        return Result.success("导入完成", data);
+    }
+
+    /**
+     * 批量导出设备
+     *
+     * <p>查询所有设备数据，使用 EasyExcel 写入 Excel 文件并返回给前端下载。</p>
+     *
+     * @param response HTTP 响应对象，用于设置下载头信息
+     */
+    @GetMapping("/export")
+    public void exportDevices(HttpServletResponse response) throws IOException {
+        // 设置响应头
+        String filename = "设备列表_" + LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss")) + ".xlsx";
+        response.setContentType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+        response.setCharacterEncoding("utf-8");
+        response.setHeader("Content-Disposition", "attachment;filename=" + URLEncoder.encode(filename, StandardCharsets.UTF_8));
+
+        // 调用 Service 导出
+        devDeviceService.exportDevices(response.getOutputStream());
     }
 }

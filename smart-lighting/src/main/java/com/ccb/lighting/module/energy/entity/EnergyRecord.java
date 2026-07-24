@@ -1,5 +1,6 @@
 package com.ccb.lighting.module.energy.entity;
 
+import com.alibaba.excel.annotation.ExcelProperty;
 import com.baomidou.mybatisplus.annotation.TableName;
 import com.ccb.lighting.common.BaseEntity;
 import jakarta.validation.constraints.NotBlank;
@@ -43,24 +44,31 @@ public class EnergyRecord extends BaseEntity implements Serializable {
 
     /** 设备ID：关联 dev_device.device_code，标识是哪个设备的能耗数据 */
     @NotBlank(message = "设备ID不能为空")
+    @ExcelProperty("设备ID")
     private String deviceId;
 
     /** 灯杆ID：冗余字段，便于按灯杆聚合统计（避免每次 join 设备表） */
+    @ExcelProperty("灯杆ID")
     private Long poleId;
 
     /** 记录时间：数据采集的时间点，时序数据的关键字段 */
     @NotNull(message = "记录时间不能为空")
+    @ExcelProperty("记录时间")
     private LocalDateTime recordTime;
 
     /** 电压（V）：单相 220V 左右为正常，过高过低都需告警 */
+    @ExcelProperty("电压(V)")
     private BigDecimal voltage;
 
     /** 电流（A）：与负载（灯泡功率）相关，异常波动可能预示设备故障 */
+    @ExcelProperty("电流(A)")
     private BigDecimal current;
 
     /** 功率（W）：瞬时功率，等于电压×电流×功率因数 */
+    @ExcelProperty("功率(W)")
     private BigDecimal power;
 
     /** 用电量（kWh）：从上次记录到本次记录的累计用电量，电费计算依据 */
+    @ExcelProperty("用电量(kWh)")
     private BigDecimal consumption;
 }

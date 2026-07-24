@@ -13,6 +13,15 @@
 -->
 <template>
   <div class="device-page">
+    <!-- 隐藏的文件输入框，用于导入 -->
+    <input
+      ref="importFileInput"
+      type="file"
+      accept=".xlsx,.xls"
+      style="display: none"
+      @change="handleFileChange"
+    />
+    
     <!-- ============ 搜索栏 ============ -->
     <el-card class="search-card" shadow="never">
       <el-form :model="query" inline @submit.prevent="handleSearch">
@@ -62,6 +71,8 @@
           <el-button type="primary" :icon="Search" @click="handleSearch">查询</el-button>
           <el-button :icon="Refresh" @click="handleReset">重置</el-button>
           <el-button type="success" :icon="Plus" @click="openAdd">新增</el-button>
+          <el-button type="warning" :icon="Upload" @click="handleImport">导入</el-button>
+          <el-button type="info" :icon="Download" @click="handleExport">导出</el-button>
         </el-form-item>
       </el-form>
     </el-card>
@@ -182,13 +193,15 @@
 <script setup>
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Search, Refresh, Plus, Edit, Delete } from '@element-plus/icons-vue'
+import { Search, Refresh, Plus, Edit, Delete, Upload, Download } from '@element-plus/icons-vue'
 import {
   pageDevice,
   addDevice,
   updateDevice,
   deleteDevice,
-  listPole
+  listPole,
+  importDevice,
+  exportDevice
 } from '@/api/device'
 
 /* ---------------- 字典数据 ---------------- */
@@ -362,6 +375,77 @@ async function handleDelete(row) {
   await deleteDevice(row.id)
   ElMessage.success('删除成功')
   loadData()
+}
+
+/* ---------------- 导入/导出 ---------------- */
+
+// 文件导入处理
+const importLoading = ref(false)
+const importFileInput = ref(null)
+
+function handleImport() {
+  importFileInput.value?.click()
+}
+
+async function handleFileChange(event) {
+  const file = event.target.files?.[0]
+  if (!file) return
+  
+  // 校验文件类型
+  const name = file.name.toLowerCase()
+  if (!name.endsWith('.xlsx') && !name.endsWith('.xls')) {
+    ElMessage.error('仅支持 Excel 文件（.xlsx 或 .xls）')
+    event.target.value = ''
+    return
+  }
+  
+  importLoading.value = true
+  try {
+    const res = await importDevice(file)
+    const data = res.data || {}
+    const success = data.successCount || 0
+    const fail = data.failCount || 0
+    ElMessage.success(`导入完成：成功 ${success} 条，失败 ${fail} 条`)
+    
+    // 如果有失败记录，显示失败原因
+    if (fail > 0 && data.failReasons && data.failReasons.length > 0) {
+      ElMessageBox.alert(data.failReasons.join('\n'), '导入失败详情', {
+        type: 'warning',
+        dangerouslyUseHTMLString: true
+      })
+    }
+    
+    loadData()
+  } finally {
+    importLoading.value = false
+    event.target.value = ''
+  }
+}
+
+// 文件导出处理
+async function handleExport() {
+  try {
+    const res = await exportDevice()
+    if (!res || !res.data) {
+      ElMessage.error('导出失败')
+      return
+    }
+    
+    // 创建下载链接
+    const blob = new Blob([res.data], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
+    const url = window.URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = '设备列表.xlsx'
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    window.URL.revokeObjectURL(url)
+    
+    ElMessage.success('导出成功')
+  } catch (e) {
+    ElMessage.error('导出失败：' + (e.message || '未知错误'))
+  }
 }
 
 /* ---------------- 初始化 ---------------- */

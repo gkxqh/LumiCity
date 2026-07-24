@@ -59,4 +59,19 @@ public interface DevDeviceService {
      * @param id 设备 ID
      */
     void delete(Long id);
+
+    /**
+     * 导入设备数据
+     *
+     * @param inputStream Excel 文件输入流
+     * @return 导入结果（成功/失败数量及原因）
+     */
+    DeviceImportListener.ImportResult importDevices(java.io.InputStream inputStream);
+
+    /**
+     * 导出设备数据
+     *
+     * @param outputStream 输出流
+     */
+    void exportDevices(java.io.OutputStream outputStream);
 }

@@ -64,4 +64,15 @@ public interface EnergyRecordService {
      * @return 统计结果 Map
      */
     Map<String, Object> statistics();
+
+    /**
+     * 导出能耗报表
+     *
+     * @param outputStream 输出流
+     * @param deviceId     设备ID（可选，为空则导出全部）
+     * @param startTime    开始时间（可选）
+     * @param endTime      结束时间（可选）
+     */
+    void exportReport(java.io.OutputStream outputStream, String deviceId, 
+                      java.time.LocalDateTime startTime, java.time.LocalDateTime endTime);
 }
