@@ -3,6 +3,7 @@ package com.ccb.lighting.module.publish.controller;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.ccb.lighting.common.PageQuery;
 import com.ccb.lighting.common.Result;
+import com.ccb.lighting.module.publish.dto.LedProgramQueryDTO;
 import com.ccb.lighting.module.publish.entity.LedProgram;
 import com.ccb.lighting.module.publish.service.LedProgramService;
 import jakarta.validation.Valid;
@@ -44,8 +45,8 @@ public class LedProgramController {
      * @return 分页数据
      */
     @GetMapping("/page")
-    public Result<IPage<LedProgram>> page(PageQuery query) {
-        return Result.success(ledProgramService.pageList(query));
+    public Result<IPage<LedProgram>> page(LedProgramQueryDTO query) {
+        return Result.success(ledProgramService.pageListByQuery(query));
     }
 
     /**
