@@ -68,15 +68,19 @@ public class AuthServiceImpl implements AuthService {
                 .map(SysRole::getRoleCode)
                 .collect(Collectors.toList());
 
-        // 6. 生成 JWT token：传入 userId 和 username，JwtUtil 内部设置过期时间并签名
-        String token = jwtUtil.createToken(user.getId(), user.getUsername());
+        // 6. 聚合权限标识：用户 → 角色 → 菜单，取去重后的 perms（对应按钮/接口权限）
+        List<String> perms = sysUserMapper.selectUserPerms(user.getId());
 
-        // 7. 组装 LoginVO 返回（不返回密码等敏感字段）
+        // 7. 生成 JWT token：把 userId、username、roles、perms 一起写入，供接口级鉴权
+        String token = jwtUtil.createToken(user.getId(), user.getUsername(), roles, perms);
+
+        // 8. 组装 LoginVO 返回（不返回密码等敏感字段）
         LoginVO vo = new LoginVO();
         vo.setToken(token);
         vo.setUsername(user.getUsername());
         vo.setNickname(user.getNickname());
         vo.setRoles(roles);
+        vo.setPerms(perms);
         return vo;
     }
 

@@ -21,3 +21,9 @@ auth/system/device/lighting/energy/alarm/video/environment/publish/workorder + d
 - 5 个按钮：①检测启动MySQL ②初始化库(跑schema.sql,drop重建) ③生成测试数据 ④一键全流程 ⑤数据概览。
 - data_generator.py：清空业务表+测试用户(保留admin与初始角色菜单)→随机生成13表数据(8用户/30杆/79设备/20策略/840能耗/50告警/16摄像/1176环境/15LED/25工单)，含时序昼夜变化，每次随机幂等。已在临时库验证通过。
 - schema.sql 是 smart-lighting/sql/schema.sql 的自包含拷贝。
+
+## 鉴权/RBAC 设计要点（易踩坑，勿回退）
+- `WebMvcConfig` 只排除 `/auth/login`、`/auth/logout`、`/auth/register` 免 token；**`/auth/info` 必须过 `JwtInterceptor`**（否则 `request.getAttribute("userId")` 为 null → 500 NPE）。
+- `JwtInterceptor` 做 `@RequiresPerms` 接口级校验；**ADMIN 视为超级用户直接放行**（种子数据仅给 ADMIN 绑 14 个 `:list` 权限，不放开则 admin 无法做写操作）。OPERATOR 等无 ADMIN 且无对应 perms → 403。
+- 登录时在 `AuthServiceImpl` 聚合用户菜单 `perms` 写入 JWT；`LoginVO`/`UserInfoVO` 均带回 roles+perms。`SecurityContext`(ThreadLocal) 存当前用户上下文。
+- 实跑后端：用 JDK17 干净 `mvn clean package -DskipTests` 打包，再 `java -jar target/smart-lighting-1.0.0.jar --server.port=38080 --spring.datasource.password=123456`（组员把 yml 密码改成 Qfsfy.060527，本地统一用 123456 覆盖）。e2e 脚本 `/tmp/e2e_role.py`。

@@ -9,6 +9,7 @@ import org.springframework.stereotype.Component;
 import javax.crypto.SecretKey;
 import java.nio.charset.StandardCharsets;
 import java.util.Date;
+import java.util.List;
 
 /**
  * JWT 工具类
@@ -25,17 +26,31 @@ public class JwtUtil {
         return Keys.hmacShaKeyFor(jwtProperties.getSecret().getBytes(StandardCharsets.UTF_8));
     }
 
-    /** 生成 token */
-    public String createToken(Long userId, String username) {
+    /**
+     * 生成 token（携带角色与权限，供接口级鉴权使用）
+     *
+     * @param userId   用户 ID（subject）
+     * @param username 用户名
+     * @param roles    角色编码列表（如 ["admin"]）
+     * @param perms    权限标识列表（如 ["system:user:list"]），从用户角色→菜单聚合而来
+     */
+    public String createToken(Long userId, String username, List<String> roles, List<String> perms) {
         Date now = new Date();
         Date expire = new Date(now.getTime() + jwtProperties.getExpire() * 1000);
-        return Jwts.builder()
+        var builder = Jwts.builder()
                 .subject(String.valueOf(userId))
                 .claim("username", username)
                 .issuedAt(now)
                 .expiration(expire)
-                .signWith(getKey())
-                .compact();
+                .signWith(getKey());
+        // 角色/权限写入 claim，拦截器据此做接口级鉴权（避免每次请求查库）
+        if (roles != null) {
+            builder.claim("roles", roles);
+        }
+        if (perms != null) {
+            builder.claim("perms", perms);
+        }
+        return builder.compact();
     }
 
     /** 解析 token，返回 Claims（里面含 userId、username 等） */

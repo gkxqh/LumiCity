@@ -3,6 +3,8 @@ package com.ccb.lighting.module.system.service;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.ccb.lighting.module.system.entity.SysUser;
 
+import java.util.List;
+
 /**
  * 系统用户 Service 接口
  *
@@ -67,4 +69,20 @@ public interface SysUserService {
      * @return 用户实体，不存在返回 null
      */
     SysUser findByUsername(String username);
+
+    /**
+     * 查询某用户拥有的角色 ID 列表
+     *
+     * @param userId 用户 ID
+     * @return 角色 ID 列表（可能为空）
+     */
+    List<Long> getUserRoleIds(Long userId);
+
+    /**
+     * 给用户重新分配角色（整体重写 sys_user_role）
+     *
+     * @param userId  用户 ID
+     * @param roleIds 角色 ID 列表（可空，表示清空角色）
+     */
+    void assignRoles(Long userId, List<Long> roleIds);
 }

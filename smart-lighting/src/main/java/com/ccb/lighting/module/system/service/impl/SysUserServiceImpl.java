@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.ccb.lighting.common.BusinessException;
 import com.ccb.lighting.common.ResultCode;
+import com.ccb.lighting.module.system.entity.SysRole;
 import com.ccb.lighting.module.system.entity.SysUser;
 import com.ccb.lighting.module.system.mapper.SysUserMapper;
 import com.ccb.lighting.module.system.service.SysUserService;
@@ -12,6 +13,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.util.DigestUtils;
 
 import java.nio.charset.StandardCharsets;
+import java.util.List;
 
 /**
  * 系统用户 Service 实现类
@@ -130,6 +132,30 @@ public class SysUserServiceImpl implements SysUserService {
         return sysUserMapper.selectOne(
                 new LambdaQueryWrapper<SysUser>().eq(SysUser::getUsername, username)
         );
+    }
+
+    /**
+     * 查询用户拥有的角色 ID 列表
+     * 复用多表关联方法 selectUserRoleList，再取 id 集合
+     */
+    @Override
+    public List<Long> getUserRoleIds(Long userId) {
+        return sysUserMapper.selectUserRoleList(userId).stream()
+                .map(SysRole::getId)
+                .collect(java.util.stream.Collectors.toList());
+    }
+
+    /**
+     * 给用户重新分配角色：先删后插，整体重写绑定关系
+     */
+    @Override
+    public void assignRoles(Long userId, List<Long> roleIds) {
+        sysUserMapper.deleteUserRoles(userId);
+        if (roleIds != null) {
+            for (Long roleId : roleIds) {
+                sysUserMapper.insertUserRole(userId, roleId);
+            }
+        }
     }
 
     /**

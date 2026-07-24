@@ -23,7 +23,9 @@ public class WebMvcConfig implements WebMvcConfigurer {
         registry.addInterceptor(jwtInterceptor)
                 .addPathPatterns("/**")
                 .excludePathPatterns(
-                        "/auth/**",            // 登录接口不拦截
+                        "/auth/login",         // 登录接口免 token
+                        "/auth/logout",        // 登出接口免 token
+                        "/auth/register",      // 注册接口免 token
                         "/ws/**",              // WebSocket 握手端点（鉴权交由 AlarmHandshakeInterceptor）
                         "/swagger-ui.html",    // Swagger UI 入口（重定向页）
                         "/swagger-ui/**",      // Swagger UI 静态资源

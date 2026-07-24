@@ -4,9 +4,11 @@ import com.ccb.lighting.common.Result;
 import com.ccb.lighting.module.system.dto.LoginDTO;
 import com.ccb.lighting.module.system.dto.RegisterDTO;
 import com.ccb.lighting.module.system.entity.SysUser;
+import com.ccb.lighting.module.system.mapper.SysUserMapper;
 import com.ccb.lighting.module.system.service.AuthService;
 import com.ccb.lighting.module.system.service.SysUserService;
 import com.ccb.lighting.module.system.vo.LoginVO;
+import com.ccb.lighting.module.system.vo.UserInfoVO;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -39,6 +41,9 @@ public class AuthController {
 
     /** 用户 Service：/auth/info 接口用它查用户详情 */
     private final SysUserService sysUserService;
+
+    /** 用户 Mapper：/auth/info 聚合角色与权限标识 */
+    private final SysUserMapper sysUserMapper;
 
     /**
      * 登录接口
@@ -88,7 +93,7 @@ public class AuthController {
      * @return Result<SysUser>，密码字段会清空避免泄露
      */
     @GetMapping("/info")
-    public Result<SysUser> info(HttpServletRequest request) {
+    public Result<UserInfoVO> info(HttpServletRequest request) {
         // 拦截器存的 userId 是 String，这里转回 Long
         Object userIdAttr = request.getAttribute("userId");
         Long userId = Long.parseLong(userIdAttr.toString());
@@ -99,8 +104,13 @@ public class AuthController {
             return Result.error(com.ccb.lighting.common.ResultCode.USER_NOT_FOUND);
         }
 
-        // 清空密码再返回，避免敏感信息泄露
-        user.setPassword(null);
-        return Result.success(user);
+        // 组装返回信息（不返回密码等敏感字段），并带上角色与权限，供前端做权限控制
+        UserInfoVO vo = new UserInfoVO();
+        vo.setUsername(user.getUsername());
+        vo.setNickname(user.getNickname());
+        vo.setRoles(sysUserMapper.selectUserRoleList(userId).stream()
+                .map(r -> r.getRoleCode()).collect(java.util.stream.Collectors.toList()));
+        vo.setPerms(sysUserMapper.selectUserPerms(userId));
+        return Result.success(vo);
     }
 }
