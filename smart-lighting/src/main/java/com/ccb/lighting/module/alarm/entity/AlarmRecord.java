@@ -1,5 +1,6 @@
 package com.ccb.lighting.module.alarm.entity;
 
+import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableName;
 import com.ccb.lighting.common.BaseEntity;
 import jakarta.validation.constraints.NotBlank;
@@ -57,8 +58,11 @@ public class AlarmRecord extends BaseEntity implements Serializable {
     @NotBlank(message = "设备ID不能为空")
     private String deviceId;
 
-    /** 灯杆ID：冗余字段，便于按灯杆聚合统计告警 */
-    private Long poleId;
+    @TableField(exist = false)
+    private String deviceName;
+
+    /** 灯杆ID：关联 dev_pole.pole_id，标识告警的灯杆 */
+    private Integer poleId;
 
     /**
      * 告警类型：

@@ -94,12 +94,13 @@ public class AlarmRecordServiceImpl implements AlarmRecordService {
         }
 
         wrapper.orderByDesc(AlarmRecord::getAlarmTime);
-        return alarmRecordMapper.selectPage(
+
+        return alarmRecordMapper.selectAlarmPage(
                 new Page<>(query.getCurrent(), query.getSize()),
-                wrapper
-        );
+                query);
 
     }
+
 
     /**
      * 处理告警
