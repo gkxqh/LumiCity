@@ -4,6 +4,8 @@ import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import com.ccb.lighting.module.device.entity.DevDevice;
 import org.apache.ibatis.annotations.Mapper;
 
+import java.util.List;
+
 /**
  * 设备 Mapper 接口
  *

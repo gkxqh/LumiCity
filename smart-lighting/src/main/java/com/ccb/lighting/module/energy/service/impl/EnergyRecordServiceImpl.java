@@ -98,15 +98,15 @@ public class EnergyRecordServiceImpl implements EnergyRecordService {
 
     /**
      * 能耗统计汇总
-     * 简化实现：返回总记录数与采样说明
-     * 真实场景应写 SQL：SELECT SUM(consumption), AVG(power), COUNT(*) FROM energy_record
      */
     @Override
     public Map<String, Object> statistics() {
+        Map<String, Object> raw = energyRecordMapper.sumStatistics();
         Map<String, Object> result = new HashMap<>();
-        Long total = energyRecordMapper.selectCount(null);
-        result.put("totalRecords", total);
-        result.put("description", "总记录数，可扩展为 SUM(consumption) 等聚合统计");
+        result.put("today", raw.get("today"));
+        result.put("yesterday", raw.get("yesterday"));
+        result.put("month", raw.get("month_total"));
+        result.put("total", raw.get("grand_total"));
         return result;
     }
 
