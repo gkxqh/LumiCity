@@ -34,7 +34,7 @@ DROP TABLE IF EXISTS sys_user;
 CREATE TABLE sys_user (
     id          BIGINT       NOT NULL AUTO_INCREMENT COMMENT '主键ID',
     username    VARCHAR(50)  NOT NULL COMMENT '用户名（登录账号，唯一）',
-    password    VARCHAR(100) NOT NULL COMMENT '密码（MD5 加密存储）',
+    password    VARCHAR(100) NOT NULL COMMENT '密码（BCrypt 加密存储）',
     nickname    VARCHAR(50)            COMMENT '昵称（中文名，用于展示）',
     phone       VARCHAR(20)            COMMENT '手机号',
     email       VARCHAR(100)          COMMENT '邮箱',
@@ -380,10 +380,10 @@ CREATE TABLE work_order (
 
 -- -----------------------------------------------------------------------------
 -- 4.1 初始用户
--- admin 用户，密码 123456 的 MD5：e10adc3949ba59abbe56e057f20f883e
+-- admin 用户，密码 123456 的 BCrypt：$2a$10$0lXgtcSeFZjGAXpMubpTNetpC1dxIa9.wwt3DlW3AfyLZMZmk67U2
 -- -----------------------------------------------------------------------------
 INSERT INTO sys_user (username, password, nickname, phone, email, status, create_time, update_time)
-VALUES ('admin', 'e10adc3949ba59abbe56e057f20f883e', '系统管理员', '13800000000', 'admin@ccb.com', 1, NOW(), NOW());
+VALUES ('admin', '$2a$10$0lXgtcSeFZjGAXpMubpTNetpC1dxIa9.wwt3DlW3AfyLZMZmk67U2', '系统管理员', '13800000000', 'admin@ccb.com', 1, NOW(), NOW());
 
 -- -----------------------------------------------------------------------------
 -- 4.2 初始角色
