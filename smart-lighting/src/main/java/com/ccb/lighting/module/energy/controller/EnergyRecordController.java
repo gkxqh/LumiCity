@@ -98,8 +98,8 @@ public class EnergyRecordController {
     @GetMapping("/trend")
     public Result<List<EnergyRecord>> trend(
             @RequestParam String deviceId,
-            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime startTime,
-            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime endTime) {
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime startTime,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime endTime) {
         return Result.success(energyRecordService.trend(deviceId, startTime, endTime));
     }
 

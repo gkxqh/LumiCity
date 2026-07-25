@@ -40,18 +40,30 @@
       </el-col>
     </el-row>
 
+    <!-- ============ 用电趋势查询条件 ============ -->
+    <el-card shadow="never" class="filter-card">
+      <el-form inline>
+        <el-form-item label="设备">
+          <el-select v-model="trendDeviceId" placeholder="请选择设备" clearable filterable style="width:200px">
+            <el-option v-for="d in deviceOptions" :key="d.deviceCode" :label="d.deviceCode + ' - ' + d.deviceName" :value="d.deviceCode" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="起始时间">
+          <el-date-picker v-model="trendStartTime" type="datetime" placeholder="选择起始时间" value-format="YYYY-MM-DDTHH:mm:ss" style="width:190px" />
+        </el-form-item>
+        <el-form-item label="截止时间">
+          <el-date-picker v-model="trendEndTime" type="datetime" placeholder="选择截止时间" value-format="YYYY-MM-DDTHH:mm:ss" style="width:190px" />
+        </el-form-item>
+        <el-form-item>
+          <el-button type="primary" @click="loadTrend" :disabled="!trendDeviceId">查询趋势</el-button>
+        </el-form-item>
+      </el-form>
+    </el-card>
+
     <!-- ============ 用电趋势折线图 ============ -->
     <el-card shadow="never" class="chart-card">
       <template #header>
-        <div class="card-header">
-          <span>用电趋势</span>
-          <!-- 日 / 周 / 月切换 -->
-          <el-radio-group v-model="trendType" size="small" @change="loadTrend">
-            <el-radio-button label="day">日</el-radio-button>
-            <el-radio-button label="week">周</el-radio-button>
-            <el-radio-button label="month">月</el-radio-button>
-          </el-radio-group>
-        </div>
+        <span>用电趋势</span>
       </template>
       <div ref="trendChartRef" class="chart-box"></div>
     </el-card>
@@ -96,6 +108,7 @@ import { ref, reactive, onMounted, onUnmounted, nextTick } from 'vue'
 import { ElMessage } from 'element-plus'
 import * as echarts from 'echarts'
 import { pageEnergy, energyTrend, energyStatistics, exportEnergyReport } from '@/api/other'
+import { pageDevice } from '@/api/device'
 
 /* ---------------- 顶部统计卡片 ---------------- */
 
@@ -122,40 +135,44 @@ async function loadStatistics() {
 const trendChartRef = ref(null)
 let trendChart = null
 
-// 趋势类型：day / week / month
-const trendType = ref('day')
+// 设备下拉选项
+const deviceOptions = ref([])
+
+// 用户选择的查询参数
+const trendDeviceId = ref('')
+const trendStartTime = ref('')
+const trendEndTime = ref('')
+
+// 加载设备列表（下拉框用）
+async function loadDeviceOptions() {
+  try {
+    const res = await pageDevice({ current: 1, size: 999 })
+    const page = res.data || {}
+    deviceOptions.value = page.records || page.list || []
+  } catch {
+    deviceOptions.value = []
+  }
+}
+
 // 趋势数据：[{ date, energy }]
 const trendData = ref([])
 
 // 加载趋势数据
-// 后端需要 deviceId/startTime/endTime，前端简化处理：查第一个设备最近7天
+// 后端接口：GET /energy/trend?deviceId=xxx&startTime=xxx&endTime=xxx
+// 返回 List<EnergyRecord>，前端取 recordTime 和 consumption
 async function loadTrend() {
+  // 参数校验
+  if (!trendDeviceId.value) {
+    ElMessage.warning('请先选择设备')
+    return
+  }
+
+  const params = { deviceId: trendDeviceId.value }
+  if (trendStartTime.value) params.startTime = trendStartTime.value
+  if (trendEndTime.value) params.endTime = trendEndTime.value
+
   try {
-    // 先获取一条能耗记录，拿到 deviceId
-    const pageRes = await pageEnergy({ current: 1, size: 1 })
-    const page = pageRes.data || {}
-    const list = page.records || page.list || []
-    if (list.length === 0) {
-      trendData.value = []
-      updateTrendChart()
-      return
-    }
-    const deviceId = list[0].deviceId || 'D-001'
-
-    // 根据 trendType 计算时间范围
-    const now = new Date()
-    const endTime = now.toISOString().slice(0, 19)  // 2026-07-22T16:00:00
-    let startTime
-    if (trendType.value === 'day') {
-      startTime = new Date(now - 24 * 60 * 60 * 1000).toISOString().slice(0, 19)
-    } else if (trendType.value === 'week') {
-      startTime = new Date(now - 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 19)
-    } else {
-      startTime = new Date(now - 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 19)
-    }
-
-    const res = await energyTrend({ deviceId, startTime, endTime })
-    // 后端返回 List<EnergyRecord>，转为前端需要的 [{ date, energy }]
+    const res = await energyTrend(params)
     const records = res.data || []
     trendData.value = records.map(r => ({
       date: r.recordTime,
@@ -269,8 +286,7 @@ onMounted(async () => {
   if (trendChartRef.value) {
     trendChart = echarts.init(trendChartRef.value)
   }
-  await Promise.all([loadStatistics(), loadTrend(), loadData()])
-  updateTrendChart()
+  await Promise.all([loadStatistics(), loadData(), loadDeviceOptions()])
   window.addEventListener('resize', handleResize)
 })
 
@@ -312,6 +328,9 @@ onUnmounted(() => {
 }
 
 .chart-card {
+  margin-bottom: 16px;
+}
+.filter-card {
   margin-bottom: 16px;
 }
 .card-header {
