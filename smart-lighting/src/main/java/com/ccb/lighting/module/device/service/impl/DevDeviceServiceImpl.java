@@ -1,5 +1,7 @@
 package com.ccb.lighting.module.device.service.impl;
 
+import com.alibaba.excel.EasyExcel;
+import com.alibaba.excel.write.style.column.LongestMatchColumnWidthStyleStrategy;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
@@ -8,12 +10,18 @@ import com.ccb.lighting.common.ResultCode;
 import com.ccb.lighting.module.device.dto.DeviceQueryDTO;
 import com.ccb.lighting.module.device.entity.DevDevice;
 import com.ccb.lighting.module.device.entity.DevPole;
+import com.ccb.lighting.module.device.listener.DeviceImportListener;
 import com.ccb.lighting.module.device.mapper.DevDeviceMapper;
 import com.ccb.lighting.module.device.mapper.DevPoleMapper;
 import com.ccb.lighting.module.device.service.DevDeviceService;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
+
+import java.io.InputStream;
+import java.io.OutputStream;
+import java.util.List;
 
 /**
  * 设备 Service 实现类
@@ -27,6 +35,7 @@ import org.springframework.util.StringUtils;
  * - DevPoleMapper：新增设备时校验所属灯杆是否存在（跨表校验，需查灯杆表）
  * 这是"业务层组合多个 Mapper"的典型场景，一个 Service 可依赖多个 Mapper。</p>
  */
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class DevDeviceServiceImpl implements DevDeviceService {
@@ -129,5 +138,47 @@ public class DevDeviceServiceImpl implements DevDeviceService {
     @Override
     public void delete(Long id) {
         devDeviceMapper.deleteById(id);
+    }
+
+    /**
+     * 导入设备数据
+     * 使用 EasyExcel 读取上传的 Excel 文件，通过自定义监听器处理每行数据
+     */
+    @Override
+    public DeviceImportListener.ImportResult importDevices(InputStream inputStream) {
+        DeviceImportListener listener = new DeviceImportListener(devDeviceMapper, devPoleMapper);
+        try {
+            EasyExcel.read(inputStream, DeviceImportDTO.class, listener)
+                    .sheet()
+                    .doRead();
+        } catch (Exception e) {
+            log.error("设备导入失败", e);
+            throw new BusinessException("导入失败：" + e.getMessage());
+        }
+        return listener.getResult();
+    }
+
+    /**
+     * 导出设备数据
+     * 使用 EasyExcel 写入所有设备数据到输出流
+     * 直接使用 DevDevice 实体（已添加 @ExcelProperty 注解），无需转换
+     */
+    @Override
+    public void exportDevices(OutputStream outputStream) {
+        // 查询所有设备数据
+        LambdaQueryWrapper<DevDevice> wrapper = new LambdaQueryWrapper<>();
+        wrapper.orderByDesc(DevDevice::getCreateTime);
+        List<DevDevice> devices = devDeviceMapper.selectList(wrapper);
+
+        try {
+            // 直接使用 DevDevice 实体，@ExcelProperty 注解定义了 Excel 列标题
+            EasyExcel.write(outputStream, DevDevice.class)
+                    .sheet("设备列表")
+                    .registerWriteHandler(new LongestMatchColumnWidthStyleStrategy())
+                    .doWrite(devices);
+        } catch (Exception e) {
+            log.error("设备导出失败", e);
+            throw new BusinessException("导出失败：" + e.getMessage());
+        }
     }
 }

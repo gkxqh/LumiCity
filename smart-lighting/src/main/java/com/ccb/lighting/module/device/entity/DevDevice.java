@@ -1,5 +1,6 @@
 package com.ccb.lighting.module.device.entity;
 
+import com.alibaba.excel.annotation.ExcelProperty;
 import com.baomidou.mybatisplus.annotation.TableName;
 import com.ccb.lighting.common.BaseEntity;
 import jakarta.validation.constraints.NotBlank;
@@ -45,10 +46,12 @@ public class DevDevice extends BaseEntity implements Serializable {
 
     /** 设备编号：业务唯一编码（如 "L-2024-0001" 表示照明灯），新增时需查重，前端必填 */
     @NotBlank(message = "设备编号不能为空")
+    @ExcelProperty("设备编号")
     private String deviceCode;
 
     /** 设备名称：用于前端展示（如 "人民路1号路灯"），前端必填 */
     @NotBlank(message = "设备名称不能为空")
+    @ExcelProperty("设备名称")
     private String deviceName;
 
     /**
@@ -59,20 +62,26 @@ public class DevDevice extends BaseEntity implements Serializable {
      * - LED_SCREEN：LED显示屏（信息发布、广告）
      * - BROADCAST：广播（应急通知、音乐播放）
      */
+    @ExcelProperty("设备类型")
     private String deviceType;
 
     /** 所属灯杆ID：关联 dev_pole.id，表示设备挂载在哪个灯杆上。新增设备时校验灯杆是否存在 */
+    @ExcelProperty("所属灯杆ID")
     private Long poleId;
 
     /** 设备型号：厂商定义的产品型号，便于备件替换、故障匹配 */
+    @ExcelProperty("设备型号")
     private String model;
 
     /** 厂商：设备生产厂家，便于售后联系、质保追溯 */
+    @ExcelProperty("厂商")
     private String vendor;
 
     /** 状态：0=离线，1=在线，2=故障。由设备心跳上报或定时巡检更新 */
+    @ExcelProperty("状态")
     private Integer status;
 
     /** 最后在线时间：设备最近一次心跳上报时间，用于判断是否离线（超过阈值未上报则置离线） */
+    @ExcelProperty("最后在线时间")
     private LocalDateTime lastOnlineTime;
 }

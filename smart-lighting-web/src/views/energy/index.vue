@@ -58,6 +58,12 @@
 
     <!-- ============ 用电记录表格 ============ -->
     <el-card shadow="never">
+      <template #header>
+        <div class="card-header">
+          <span>用电记录</span>
+          <el-button type="info" @click="handleExport">导出报表</el-button>
+        </div>
+      </template>
       <el-table :data="tableData" v-loading="loading" border stripe style="width: 100%">
         <el-table-column type="index" label="序号" width="60" align="center" />
         <el-table-column prop="deviceId" label="设备ID" min-width="140" show-overflow-tooltip />
@@ -87,8 +93,9 @@
 
 <script setup>
 import { ref, reactive, onMounted, onUnmounted, nextTick } from 'vue'
+import { ElMessage } from 'element-plus'
 import * as echarts from 'echarts'
-import { pageEnergy, energyTrend, energyStatistics } from '@/api/other'
+import { pageEnergy, energyTrend, energyStatistics, exportEnergyReport } from '@/api/other'
 
 /* ---------------- 顶部统计卡片 ---------------- */
 
@@ -213,6 +220,39 @@ async function loadData() {
     total.value = page.total || 0
   } finally {
     loading.value = false
+  }
+}
+
+/* ---------------- 导出报表 ---------------- */
+
+async function handleExport() {
+  try {
+    // 获取设备ID（如果有的话）
+    let deviceId = null
+    if (tableData.value.length > 0) {
+      deviceId = tableData.value[0].deviceId
+    }
+    
+    const res = await exportEnergyReport({ deviceId })
+    if (!res || !res.data) {
+      ElMessage.error('导出失败')
+      return
+    }
+    
+    // 创建下载链接
+    const blob = new Blob([res.data], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
+    const url = window.URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = '能耗报表.xlsx'
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    window.URL.revokeObjectURL(url)
+    
+    ElMessage.success('导出成功')
+  } catch (e) {
+    ElMessage.error('导出失败：' + (e.message || '未知错误'))
   }
 }
 

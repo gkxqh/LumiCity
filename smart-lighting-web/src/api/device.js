@@ -49,3 +49,15 @@ export function updatePole(data) {
 export function deletePole(id) {
   return request({ url: `/device/pole/${id}`, method: 'delete' })
 }
+
+// 设备批量导入
+export function importDevice(file) {
+  const formData = new FormData()
+  formData.append('file', file)
+  return request({ url: '/device/import', method: 'post', data: formData })
+}
+
+// 设备批量导出
+export function exportDevice() {
+  return request({ url: '/device/export', method: 'get', responseType: 'blob' })
+}

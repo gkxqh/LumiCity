@@ -19,4 +19,11 @@ import org.apache.ibatis.annotations.Mapper;
  */
 @Mapper
 public interface DevDeviceMapper extends BaseMapper<DevDevice> {
+
+    /**
+     * 批量插入设备数据
+     *
+     * @param list 设备列表
+     */
+    void insertBatch(List<DevDevice> list);
 }

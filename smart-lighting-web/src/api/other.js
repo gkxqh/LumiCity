@@ -32,6 +32,9 @@ export function energyTrend(params) {
 export function energyStatistics(params) {
   return request({ url: '/energy/statistics', method: 'get', params })
 }
+export function exportEnergyReport(params) {
+  return request({ url: '/energy/export', method: 'get', params, responseType: 'blob' })
+}
 
 // ========== 照明控制 ==========
 export function pageStrategy(params) {

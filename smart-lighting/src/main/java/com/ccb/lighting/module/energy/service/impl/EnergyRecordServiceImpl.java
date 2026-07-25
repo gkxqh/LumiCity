@@ -1,16 +1,21 @@
 package com.ccb.lighting.module.energy.service.impl;
 
+import com.alibaba.excel.EasyExcel;
+import com.alibaba.excel.write.style.column.LongestMatchColumnWidthStyleStrategy;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.ccb.lighting.common.BusinessException;
 import com.ccb.lighting.common.PageQuery;
 import com.ccb.lighting.module.energy.entity.EnergyRecord;
 import com.ccb.lighting.module.energy.mapper.EnergyRecordMapper;
 import com.ccb.lighting.module.energy.service.EnergyRecordService;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
+import java.io.OutputStream;
 import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.List;
@@ -24,6 +29,7 @@ import java.util.Map;
  * - 趋势查询：selectList + 时间范围条件，按记录时间正序返回
  * - 统计汇总：用 selectCount 获取记录数，可扩展为 SQL 聚合查询</p>
  */
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class EnergyRecordServiceImpl implements EnergyRecordService {
@@ -102,5 +108,41 @@ public class EnergyRecordServiceImpl implements EnergyRecordService {
         result.put("totalRecords", total);
         result.put("description", "总记录数，可扩展为 SUM(consumption) 等聚合统计");
         return result;
+    }
+
+    /**
+     * 导出能耗报表
+     * 根据条件筛选能耗记录，使用 EasyExcel 导出为 Excel 文件
+     * 直接使用 EnergyRecord 实体（已添加 @ExcelProperty 注解），无需转换
+     */
+    @Override
+    public void exportReport(OutputStream outputStream, String deviceId, 
+                            LocalDateTime startTime, LocalDateTime endTime) {
+        // 构建查询条件
+        LambdaQueryWrapper<EnergyRecord> wrapper = new LambdaQueryWrapper<>();
+        if (StringUtils.hasText(deviceId)) {
+            wrapper.eq(EnergyRecord::getDeviceId, deviceId);
+        }
+        if (startTime != null) {
+            wrapper.ge(EnergyRecord::getRecordTime, startTime);
+        }
+        if (endTime != null) {
+            wrapper.le(EnergyRecord::getRecordTime, endTime);
+        }
+        wrapper.orderByAsc(EnergyRecord::getRecordTime);
+
+        // 查询数据
+        List<EnergyRecord> records = energyRecordMapper.selectList(wrapper);
+
+        try {
+            // 直接使用 EnergyRecord 实体，@ExcelProperty 注解定义了 Excel 列标题
+            EasyExcel.write(outputStream, EnergyRecord.class)
+                    .sheet("能耗报表")
+                    .registerWriteHandler(new LongestMatchColumnWidthStyleStrategy())
+                    .doWrite(records);
+        } catch (Exception e) {
+            log.error("能耗报表导出失败", e);
+            throw new BusinessException("导出失败：" + e.getMessage());
+        }
     }
 }
