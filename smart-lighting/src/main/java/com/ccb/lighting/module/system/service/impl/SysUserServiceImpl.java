@@ -9,10 +9,9 @@ import com.ccb.lighting.module.system.entity.SysUser;
 import com.ccb.lighting.module.system.mapper.SysUserMapper;
 import com.ccb.lighting.module.system.service.SysUserService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.stereotype.Service;
-import org.springframework.util.DigestUtils;
 
-import java.nio.charset.StandardCharsets;
 import java.util.List;
 
 /**
@@ -94,9 +93,9 @@ public class SysUserServiceImpl implements SysUserService {
             throw new BusinessException(ResultCode.USER_ALREADY_EXISTS);
         }
 
-        // 2. 密码加密：用 Spring 自带的 DigestUtils 做 MD5（学习蓝本简化）
-        //    生产环境强烈建议用 BCrypt（加盐、抗彩虹表），这里为不引入新依赖用 MD5
-        user.setPassword(md5(user.getPassword()));
+        // 2. 密码加密：用BCrypt确保安全
+        BCryptPasswordEncoder encoder = new BCryptPasswordEncoder();
+        user.setPassword(encoder.encode(user.getPassword()));
 
         // 3. 入库：insert 是 BaseMapper 自带方法
         //    createTime/updateTime/createBy 等由 MetaObjectHandler 自动填充，无需手动 set
@@ -156,13 +155,5 @@ public class SysUserServiceImpl implements SysUserService {
                 sysUserMapper.insertUserRole(userId, roleId);
             }
         }
-    }
-
-    /**
-     * MD5 加密工具方法（学习蓝本用，生产请换 BCrypt）
-     * 用 Spring 的 DigestUtils，无需自己写 MessageDigest 样板代码
-     */
-    private String md5(String text) {
-        return DigestUtils.md5DigestAsHex(text.getBytes(StandardCharsets.UTF_8));
     }
 }

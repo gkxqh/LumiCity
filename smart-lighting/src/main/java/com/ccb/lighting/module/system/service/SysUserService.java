@@ -41,7 +41,7 @@ public interface SysUserService {
 
     /**
      * 新增用户
-     * 内部逻辑：校验用户名是否重复 → 密码 MD5 加密 → 入库
+     * 内部逻辑：校验用户名是否重复 → 密码 BCrypt 加密 → 入库
      *
      * @param user 前端传入的用户信息（密码为明文，方法内加密）
      */
