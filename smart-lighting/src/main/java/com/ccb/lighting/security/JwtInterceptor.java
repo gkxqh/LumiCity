@@ -3,6 +3,7 @@ package com.ccb.lighting.security;
 import com.ccb.lighting.common.BusinessException;
 import com.ccb.lighting.common.ResultCode;
 import com.ccb.lighting.common.SecurityContext;
+import com.ccb.lighting.module.system.mapper.SysUserMapper;
 import io.jsonwebtoken.Claims;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
@@ -21,8 +22,8 @@ import java.util.List;
  * <p>职责：
  * 1. 校验 token（未带 / 过期 → 401/401）
  * 2. 解析 userId / username / roles / perms，写入 SecurityContext 供后续使用
- * 3. 接口级权限校验：若目标方法标注了 @RequiresPerms，则校验当前用户是否拥有所需权限，
- *    没有则抛 FORBIDDEN(403)（由全局异常处理器转成统一 Result 返回前端）
+ * 3. 接口级权限校验：若目标方法标注了 @RequiresPerms，则从数据库实时查询用户权限标识，
+ *    避免 token 快照导致的权限提升漏洞。没有则抛 FORBIDDEN(403)。
  * 4. 请求结束后清除 SecurityContext，避免线程复用串号</p>
  *
  * <p>在 WebMvcConfig 注册，排除登录/文档/WebSocket 握手等路径。</p>
@@ -33,6 +34,7 @@ public class JwtInterceptor implements HandlerInterceptor {
 
     private final JwtUtil jwtUtil;
     private final JwtProperties jwtProperties;
+    private final SysUserMapper sysUserMapper;
 
     @Override
     public boolean preHandle(HttpServletRequest request, HttpServletResponse response, Object handler) {
@@ -53,7 +55,8 @@ public class JwtInterceptor implements HandlerInterceptor {
         List<String> roles = castList(claims.get("roles"));
         List<String> perms = castList(claims.get("perms"));
         SecurityContext.SecurityInfo info = new SecurityContext.SecurityInfo();
-        info.setUserId(Long.parseLong(claims.getSubject()));
+        Long userId = Long.parseLong(claims.getSubject());
+        info.setUserId(userId);
         info.setUsername(claims.get("username", String.class));
         info.setRoles(roles);
         info.setPerms(perms);
@@ -68,8 +71,12 @@ public class JwtInterceptor implements HandlerInterceptor {
             if (anno != null) {
                 // ADMIN 视为超级用户，跳过权限校验（典型 RBAC 设计）
                 boolean isAdmin = roles != null && roles.contains("ADMIN");
-                boolean allowed = isAdmin
-                        || Arrays.stream(anno.value()).anyMatch(perms::contains);
+                if (isAdmin) {
+                    return true;
+                }
+                // 非 ADMIN 用户：从数据库实时查询当前权限，避免 token 快照导致的权限提升
+                List<String> dbPerms = sysUserMapper.selectUserPerms(userId);
+                boolean allowed = Arrays.stream(anno.value()).anyMatch(dbPerms::contains);
                 if (!allowed) {
                     throw new BusinessException(ResultCode.FORBIDDEN);
                 }

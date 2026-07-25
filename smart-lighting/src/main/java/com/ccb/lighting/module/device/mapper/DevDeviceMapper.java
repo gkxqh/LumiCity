@@ -3,8 +3,10 @@ package com.ccb.lighting.module.device.mapper;
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import com.ccb.lighting.module.device.entity.DevDevice;
 import org.apache.ibatis.annotations.Mapper;
+import org.apache.ibatis.annotations.Select;
 
 import java.util.List;
+import java.util.Map;
 
 /**
  * 设备 Mapper 接口
@@ -28,4 +30,12 @@ public interface DevDeviceMapper extends BaseMapper<DevDevice> {
      * @param list 设备列表
      */
     void insertBatch(List<DevDevice> list);
+
+    /** 按设备类型分组统计数量 */
+    @Select("SELECT device_type AS typeKey, COUNT(*) AS count FROM dev_device WHERE deleted = 0 GROUP BY device_type ORDER BY count DESC")
+    List<Map<String, Object>> countByType();
+
+    /** 按状态分组统计数量（含故障） */
+    @Select("SELECT status, COUNT(*) AS count FROM dev_device WHERE deleted = 0 GROUP BY status")
+    List<Map<String, Object>> countByStatus();
 }

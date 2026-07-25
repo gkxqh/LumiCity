@@ -33,7 +33,7 @@
         <el-form-item>
           <el-button type="primary" :icon="Search" @click="handleSearch">查询</el-button>
           <el-button :icon="Refresh" @click="handleReset">重置</el-button>
-          <el-button type="success" :icon="Plus" @click="openAdd">新增</el-button>
+          <el-button type="success" :icon="Plus" v-hasPerm="'system:user:add'" @click="openAdd">新增</el-button>
         </el-form-item>
       </el-form>
     </el-card>
@@ -56,8 +56,8 @@
         <el-table-column prop="createTime" label="创建时间" width="170" />
         <el-table-column label="操作" width="170" fixed="right" align="center">
           <template #default="{ row }">
-            <el-button type="primary" link :icon="Edit" @click="openEdit(row)">编辑</el-button>
-            <el-button type="danger" link :icon="Delete" @click="handleDelete(row)">删除</el-button>
+            <el-button type="primary" link :icon="Edit" v-hasPerm="'system:user:edit'" @click="openEdit(row)">编辑</el-button>
+            <el-button type="danger" link :icon="Delete" v-hasPerm="'system:user:delete'" @click="handleDelete(row)">删除</el-button>
           </template>
         </el-table-column>
       </el-table>

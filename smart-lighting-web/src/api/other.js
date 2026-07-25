@@ -4,8 +4,26 @@ import request from './request'
 export function getOverview() {
   return request({ url: '/dashboard/overview', method: 'get' })
 }
-export function getAlarmTrend() {
-  return request({ url: '/dashboard/alarm/trend', method: 'get' })
+export function getAlarmTrend(days) {
+  return request({ url: '/dashboard/alarm/trend', method: 'get', params: { days } })
+}
+export function getEnergyTrend(days) {
+  return request({ url: '/dashboard/energy/trend', method: 'get', params: { days } })
+}
+export function getDeviceTypeDist() {
+  return request({ url: '/dashboard/device/type-dist', method: 'get' })
+}
+export function getAlarmCategory() {
+  return request({ url: '/dashboard/alarm/category', method: 'get' })
+}
+export function getLatestAlarm(limit) {
+  return request({ url: '/dashboard/latest-alarm', method: 'get', params: { limit } })
+}
+export function getWorkOrderStats() {
+  return request({ url: '/dashboard/workorder/stats', method: 'get' })
+}
+export function getLatestEnv() {
+  return request({ url: '/dashboard/latest-env', method: 'get' })
 }
 
 // ========== 告警管理 ==========
