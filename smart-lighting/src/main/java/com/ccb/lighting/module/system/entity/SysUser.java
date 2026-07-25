@@ -23,7 +23,7 @@ import java.io.Serializable;
  * CREATE TABLE sys_user (
  *   id BIGINT PRIMARY KEY AUTO_INCREMENT,
  *   username VARCHAR(50) NOT NULL COMMENT '用户名',
- *   password VARCHAR(100) NOT NULL COMMENT '密码（MD5）',
+ *   password VARCHAR(100) NOT NULL COMMENT '密码（BCrypt）',
  *   nickname VARCHAR(50) COMMENT '昵称',
  *   phone VARCHAR(20) COMMENT '手机号',
  *   email VARCHAR(50) COMMENT '邮箱',
@@ -40,7 +40,7 @@ public class SysUser extends BaseEntity implements Serializable {
     /** 用户名（登录账号），唯一，新增时需查重 */
     private String username;
 
-    /** 密码：存储 MD5 加密后的值，绝不能存明文（学习蓝本用 MD5，生产建议用 BCrypt） */
+    /** 密码：存储 BCrypt 加密后的值，绝不能存明文 */
     private String password;
 
     /** 昵称：用于前端页面展示的真实姓名 */

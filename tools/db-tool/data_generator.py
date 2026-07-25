@@ -8,13 +8,17 @@
   - 幂等：先清空业务表与测试用户（保留 admin 及初始角色/菜单），再重新生成
 """
 import random
-import hashlib
 import math
 from datetime import datetime, timedelta, time as dtime
 
 
-def md5(text: str) -> str:
-    return hashlib.md5(text.encode("utf-8")).hexdigest()
+# ---------- 静态数据池 ----------
+
+
+def bcrypt_hash(text: str) -> str:
+    """用 Python 的 bcrypt 生成哈希，对标 Java BCryptPasswordEncoder"""
+    import bcrypt as _bcrypt
+    return _bcrypt.hashpw(text.encode("utf-8"), _bcrypt.gensalt()).decode("utf-8")
 
 
 # ---------- 静态数据池 ----------
@@ -140,7 +144,7 @@ class DataGenerator:
                 "sys_user",
                 ["username", "password", "nickname", "phone", "email", "status",
                  "create_time", "update_time", "create_by", "update_by", "deleted"],
-                (username, md5("123456"), name, f"13{random.randint(100000000,999999999)}",
+                (username, bcrypt_hash("123456"), name, f"13{random.randint(100000000,999999999)}",
                  f"{username}@ccb.com", status, *self._audit()),
             )
             rid = role_map.get(role_code, 2)
