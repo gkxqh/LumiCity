@@ -99,8 +99,15 @@ class DataGenerator:
         for t in ["energy_record", "alarm_record", "env_sensor_data", "work_order",
                   "led_program", "light_strategy", "video_camera", "dev_device", "dev_pole"]:
             self.cur.execute(f"DELETE FROM {t}")
-        # 删除测试角色（id>2）及其绑定
+        # 清理角色菜单绑定并重置 OPERATOR 权限
         self.cur.execute("DELETE FROM sys_role_menu WHERE role_id > 2")
+        self.cur.execute("DELETE FROM sys_role_menu WHERE role_id = 2")
+        # 重新给 OPERATOR 绑定业务菜单（排除系统管理相关及按钮权限）
+        self.cur.execute(
+            "INSERT INTO sys_role_menu (role_id, menu_id, create_time, update_time, create_by, update_by, deleted) "
+            "SELECT 2, id, NOW(), NOW(), 1, 1, 0 FROM sys_menu m "
+            "WHERE m.deleted = 0 AND m.id NOT IN (1, 2, 3, 4) AND m.menu_type != 'BUTTON'"
+        )
         self.cur.execute("DELETE FROM sys_user_role WHERE user_id > 1 OR role_id > 2")
         self.cur.execute("DELETE FROM sys_user WHERE id > 1")
         self.cur.execute("DELETE FROM sys_role WHERE id > 2")
@@ -118,8 +125,12 @@ class DataGenerator:
                  "update_time", "create_by", "update_by", "deleted"],
                 ("INSPECTOR", "巡检人员", "负责日常巡检与工单执行", 1, *self._audit()),
             )
-            # 给巡检角色绑定除系统管理外的菜单
-            self.cur.execute("SELECT id FROM sys_menu WHERE deleted=0 AND parent_id<>0")
+            # 给巡检角色绑定业务菜单（排除系统管理相关及按钮权限）
+            # 系统管理目录(ID=1)及其子菜单(ID=2/3/4)均排除
+            self.cur.execute(
+                "SELECT id FROM sys_menu WHERE deleted=0 AND menu_type != 'BUTTON'"
+                " AND id NOT IN (1, 2, 3, 4)"
+            )
             for (mid,) in self.cur.fetchall():
                 self._insert("sys_role_menu", ["role_id", "menu_id", "create_time",
                                                "update_time", "create_by", "update_by", "deleted"],
