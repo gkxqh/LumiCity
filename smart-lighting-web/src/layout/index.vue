@@ -61,7 +61,7 @@
 </template>
 
 <script setup>
-import { ref, provide } from 'vue'
+import { ref, provide, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { useUserStore } from '@/store/user'
 import { ElMessageBox } from 'element-plus'
@@ -73,15 +73,24 @@ const isCollapse = ref(false)
 // 提供给子组件（dashboard）控制侧边栏折叠
 provide('sidebarCollapse', isCollapse)
 
-const menuList = router.getRoutes().filter(r => r.meta && r.meta.title && r.path !== '/dashboard').map(r => ({
-  path: r.path,
-  meta: r.meta
-}))
-// 把大盘放第一个
-const dashboardRoute = router.getRoutes().find(r => r.path === '/dashboard')
-if (dashboardRoute) {
-  menuList.unshift({ path: '/dashboard', meta: dashboardRoute.meta })
+// 根据用户权限过滤侧边栏菜单（响应式 computed，随 userStore.roles/perms 变化自动刷新）
+function hasPerm(perms) {
+  if (!perms || perms.length === 0) return true
+  const isAdmin = userStore.roles.includes('ADMIN')
+  return isAdmin || perms.some(p => userStore.perms.includes(p))
 }
+
+const allRoutes = router.getRoutes()
+const menuList = computed(() => {
+  const list = allRoutes
+    .filter(r => r.meta && r.meta.title && r.path !== '/dashboard' && hasPerm(r.meta.perms))
+    .map(r => ({ path: r.path, meta: r.meta }))
+  const dashboardRoute = allRoutes.find(r => r.path === '/dashboard')
+  if (dashboardRoute) {
+    list.unshift({ path: '/dashboard', meta: dashboardRoute.meta })
+  }
+  return list
+})
 
 async function handleCommand(cmd) {
   if (cmd === 'logout') {

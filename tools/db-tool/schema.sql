@@ -483,8 +483,51 @@ INSERT INTO sys_menu (parent_id, menu_name, menu_type, path, component, perms, i
 VALUES (@dashboard_menu_id, '首页大盘', 'MENU', '/dashboard/index', 'dashboard/index/index', 'dashboard:index:list', 'DataBoard', 1, 1, 1, NOW(), NOW());
 
 -- -----------------------------------------------------------------------------
--- 4.5 角色-菜单关联
--- ADMIN 角色绑定所有菜单（这里简化，可手动按需调整）
+-- 4.5 按钮级权限数据
+-- 为系统管理子菜单添加 BUTTON 类型菜单项，承载增删改查按钮级权限标识
+-- 使用变量引用已插入的菜单 ID
+-- -----------------------------------------------------------------------------
+SET @sys_user_menu_id = (SELECT id FROM sys_menu WHERE menu_name = '用户管理' AND parent_id = @sys_menu_id LIMIT 1);
+SET @sys_role_menu_id = (SELECT id FROM sys_menu WHERE menu_name = '角色管理' AND parent_id = @sys_menu_id LIMIT 1);
+SET @sys_menu_mgr_id = (SELECT id FROM sys_menu WHERE menu_name = '菜单管理' AND parent_id = @sys_menu_id LIMIT 1);
+
+-- 用户管理下的按钮
+INSERT INTO sys_menu (parent_id, menu_name, menu_type, path, component, perms, icon, sort, visible, status, create_time, update_time)
+VALUES (@sys_user_menu_id, '新增用户', 'BUTTON', NULL, NULL, 'system:user:add', NULL, 1, 1, 1, NOW(), NOW());
+INSERT INTO sys_menu (parent_id, menu_name, menu_type, path, component, perms, icon, sort, visible, status, create_time, update_time)
+VALUES (@sys_user_menu_id, '编辑用户', 'BUTTON', NULL, NULL, 'system:user:edit', NULL, 2, 1, 1, NOW(), NOW());
+INSERT INTO sys_menu (parent_id, menu_name, menu_type, path, component, perms, icon, sort, visible, status, create_time, update_time)
+VALUES (@sys_user_menu_id, '删除用户', 'BUTTON', NULL, NULL, 'system:user:delete', NULL, 3, 1, 1, NOW(), NOW());
+
+-- 角色管理下的按钮
+INSERT INTO sys_menu (parent_id, menu_name, menu_type, path, component, perms, icon, sort, visible, status, create_time, update_time)
+VALUES (@sys_role_menu_id, '新增角色', 'BUTTON', NULL, NULL, 'system:role:add', NULL, 1, 1, 1, NOW(), NOW());
+INSERT INTO sys_menu (parent_id, menu_name, menu_type, path, component, perms, icon, sort, visible, status, create_time, update_time)
+VALUES (@sys_role_menu_id, '编辑角色', 'BUTTON', NULL, NULL, 'system:role:edit', NULL, 2, 1, 1, NOW(), NOW());
+INSERT INTO sys_menu (parent_id, menu_name, menu_type, path, component, perms, icon, sort, visible, status, create_time, update_time)
+VALUES (@sys_role_menu_id, '删除角色', 'BUTTON', NULL, NULL, 'system:role:delete', NULL, 3, 1, 1, NOW(), NOW());
+
+-- 菜单管理下的按钮
+INSERT INTO sys_menu (parent_id, menu_name, menu_type, path, component, perms, icon, sort, visible, status, create_time, update_time)
+VALUES (@sys_menu_mgr_id, '新增菜单', 'BUTTON', NULL, NULL, 'system:menu:add', NULL, 1, 1, 1, NOW(), NOW());
+INSERT INTO sys_menu (parent_id, menu_name, menu_type, path, component, perms, icon, sort, visible, status, create_time, update_time)
+VALUES (@sys_menu_mgr_id, '编辑菜单', 'BUTTON', NULL, NULL, 'system:menu:edit', NULL, 2, 1, 1, NOW(), NOW());
+INSERT INTO sys_menu (parent_id, menu_name, menu_type, path, component, perms, icon, sort, visible, status, create_time, update_time)
+VALUES (@sys_menu_mgr_id, '删除菜单', 'BUTTON', NULL, NULL, 'system:menu:delete', NULL, 3, 1, 1, NOW(), NOW());
+
+-- -----------------------------------------------------------------------------
+-- 4.6 角色-菜单关联
+-- ADMIN 角色绑定所有菜单（含按钮权限）
 -- -----------------------------------------------------------------------------
 INSERT INTO sys_role_menu (role_id, menu_id, create_time, update_time)
 SELECT 1, id, NOW(), NOW() FROM sys_menu WHERE deleted = 0;
+
+-- -----------------------------------------------------------------------------
+-- 4.7 OPERATOR/INSPECTOR 角色绑定业务菜单（不含系统管理相关及按钮权限）
+-- 注意：系统管理的一级目录 ID 为 1（DIRECTORY），子菜单 ID 为 2/3/4（MENU）
+-- -----------------------------------------------------------------------------
+INSERT INTO sys_role_menu (role_id, menu_id, create_time, update_time)
+SELECT 2, id, NOW(), NOW() FROM sys_menu m
+WHERE m.deleted = 0
+  AND m.id NOT IN (1, 2, 3, 4)
+  AND m.menu_type != 'BUTTON';
