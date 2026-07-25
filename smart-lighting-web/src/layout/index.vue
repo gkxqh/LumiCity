@@ -61,7 +61,7 @@
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import { ref, provide } from 'vue'
 import { useRouter } from 'vue-router'
 import { useUserStore } from '@/store/user'
 import { ElMessageBox } from 'element-plus'
@@ -69,6 +69,9 @@ import { ElMessageBox } from 'element-plus'
 const router = useRouter()
 const userStore = useUserStore()
 const isCollapse = ref(false)
+
+// 提供给子组件（dashboard）控制侧边栏折叠
+provide('sidebarCollapse', isCollapse)
 
 const menuList = router.getRoutes().filter(r => r.meta && r.meta.title && r.path !== '/dashboard').map(r => ({
   path: r.path,
