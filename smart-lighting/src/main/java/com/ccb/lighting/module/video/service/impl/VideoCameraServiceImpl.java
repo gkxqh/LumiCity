@@ -4,7 +4,6 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.ccb.lighting.common.BusinessException;
-import com.ccb.lighting.common.PageQuery;
 import com.ccb.lighting.common.ResultCode;
 import com.ccb.lighting.module.video.dto.VideoCameraQueryDTO;
 import com.ccb.lighting.module.video.entity.VideoCamera;
@@ -24,19 +23,6 @@ public class VideoCameraServiceImpl implements VideoCameraService {
 
     /** 摄像头 Mapper，构造器注入 */
     private final VideoCameraMapper videoCameraMapper;
-
-    /**
-     * 分页查询摄像头列表
-     */
-    @Override
-    public IPage<VideoCamera> pageList(PageQuery query) {
-        LambdaQueryWrapper<VideoCamera> wrapper = new LambdaQueryWrapper<>();
-        wrapper.orderByDesc(VideoCamera::getCreateTime);
-        return videoCameraMapper.selectPage(
-                new Page<>(query.getCurrent(), query.getSize()),
-                wrapper
-        );
-    }
 
     /**
      * 根据 id 查询摄像头

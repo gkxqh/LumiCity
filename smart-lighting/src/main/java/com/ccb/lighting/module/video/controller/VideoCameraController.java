@@ -1,7 +1,6 @@
 package com.ccb.lighting.module.video.controller;
 
 import com.baomidou.mybatisplus.core.metadata.IPage;
-import com.ccb.lighting.common.PageQuery;
 import com.ccb.lighting.common.Result;
 import com.ccb.lighting.module.video.dto.VideoCameraQueryDTO;
 import com.ccb.lighting.module.video.entity.VideoCamera;
