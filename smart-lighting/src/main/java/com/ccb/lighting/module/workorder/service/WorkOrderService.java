@@ -2,7 +2,11 @@ package com.ccb.lighting.module.workorder.service;
 
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.ccb.lighting.common.PageQuery;
+import com.ccb.lighting.module.alarm.entity.AlarmRecord;
+import com.ccb.lighting.module.system.entity.SysUser;
 import com.ccb.lighting.module.workorder.entity.WorkOrder;
+
+import java.util.List;
 
 /**
  * 工单 Service 接口
@@ -65,4 +69,14 @@ public interface WorkOrderService {
      * @param id 工单 ID
      */
     void finish(Long id);
+
+    /**
+     * 根据告警记录自动创建维修工单
+     * 包含：工单组装、入库、WebSocket 定向推送给处理人
+     *
+     * @param alarmRecord     告警记录（从中提取设备、内容等信息）
+     * @param handleUser 指定的处理人用户名
+     *
+     */
+    void createFromAlarm(AlarmRecord alarmRecord,String handleUser);
 }

@@ -1,5 +1,6 @@
 package com.ccb.lighting.module.workorder.entity;
 
+import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableName;
 import com.ccb.lighting.common.BaseEntity;
 import jakarta.validation.constraints.NotBlank;
@@ -82,6 +83,9 @@ public class WorkOrder extends BaseEntity implements Serializable {
     /** 灯杆ID：关联 dev_pole.id，便于运维人员现场定位 */
     private Long poleId;
 
+    @TableField(exist = false)
+    private String poleName;
+
     /** 指派人ID：关联 sys_user.id，标识工单派给谁处理 */
     private Long assigneeId;
 
@@ -98,4 +102,7 @@ public class WorkOrder extends BaseEntity implements Serializable {
 
     /** 完成时间：运维人员点"完成"时的时间戳，用于统计处理时长 */
     private LocalDateTime finishTime;
+
+    /** 告警ID：标识关联告警 */
+    private Long alarmId;
 }

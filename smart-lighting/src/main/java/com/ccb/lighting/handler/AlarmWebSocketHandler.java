@@ -81,4 +81,30 @@ public class AlarmWebSocketHandler extends TextWebSocketHandler {
     public int onlineCount() {
         return sessions.size();
     }
+
+    /**
+     * 定向推送给指定用户（通过握手时注入的 username 匹配）
+     */
+    public void sendToUser(String username, Object payload) {
+        if (!pushEnabled || sessions.isEmpty()) {
+            return;
+        }
+        try {
+            String json = objectMapper.writeValueAsString(payload);
+            TextMessage message = new TextMessage(json);
+            for (WebSocketSession session : sessions) {
+                if (session.isOpen()) {
+                    Object sessionUser = session.getAttributes().get("username");
+                    if (username.equals(sessionUser)) {
+                        synchronized (session) {
+                            session.sendMessage(message);
+                        }
+                    }
+                }
+            }
+        } catch (Exception e) {
+            log.warn("告警 WS 定向推送失败（目标={}）：{}", username, e.getMessage());
+        }
+    }
+
 }

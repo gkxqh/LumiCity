@@ -6,6 +6,10 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.ccb.lighting.common.BusinessException;
 import com.ccb.lighting.common.PageQuery;
 import com.ccb.lighting.common.ResultCode;
+import com.ccb.lighting.handler.AlarmWebSocketHandler;
+import com.ccb.lighting.module.alarm.entity.AlarmRecord;
+import com.ccb.lighting.module.system.entity.SysUser;
+import com.ccb.lighting.module.system.service.SysUserService;
 import com.ccb.lighting.module.workorder.entity.WorkOrder;
 import com.ccb.lighting.module.workorder.mapper.WorkOrderMapper;
 import com.ccb.lighting.module.workorder.service.WorkOrderService;
@@ -14,6 +18,8 @@ import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.concurrent.ThreadLocalRandom;
 
 /**
@@ -31,6 +37,9 @@ public class WorkOrderServiceImpl implements WorkOrderService {
 
     /** 工单 Mapper，构造器注入 */
     private final WorkOrderMapper workOrderMapper;
+
+    private final AlarmWebSocketHandler alarmWebSocketHandler;
+    private final SysUserService sysUserService;
 
     /**
      * 分页查询工单列表
@@ -134,5 +143,49 @@ public class WorkOrderServiceImpl implements WorkOrderService {
         order.setStatus(2);
         order.setFinishTime(LocalDateTime.now());
         workOrderMapper.updateById(order);
+    }
+
+    @Override
+    public void createFromAlarm(AlarmRecord alarmRecord, String handleUser) {
+        // 1. 组装工单
+        WorkOrder order = new WorkOrder();
+        order.setOrderType("REPAIR");
+
+        String typeText = switch (alarmRecord.getAlarmType()) {
+            case "OFFLINE" -> "离线告警";
+            case "OVERVOLTAGE" -> "过压告警";
+            case "OVERCURRENT" -> "过流告警";
+            case "ABNORMAL" -> "其他异常";
+            default -> "无法识别的告警，请联系管理员！";
+        };
+        String deviceName = alarmRecord.getDeviceName();
+        order.setTitle("维修工单：" + (deviceName != null ? deviceName : alarmRecord.getDeviceId()) + " - " + typeText);
+        order.setDescription(alarmRecord.getAlarmContent());
+        order.setDeviceId(alarmRecord.getDeviceId());
+        order.setPoleId(alarmRecord.getPoleId());
+        order.setAlarmId(alarmRecord.getId());
+        order.setPriority(alarmRecord.getAlarmLevel());
+        order.setStatus(1);
+
+        // 2. 设置指派人
+        SysUser assignee = sysUserService.findByUsername(handleUser);
+        if (assignee != null) {
+            order.setAssigneeId(assignee.getId());
+        }
+
+        // 3. 入库
+        this.add(order);
+
+        // 4. WebSocket 定向推送给处理人
+        Map<String, Object> wsMsg = new HashMap<>();
+        Map<String, Object> wsData = new HashMap<>();
+        wsData.put("id", order.getId());
+        wsData.put("orderNo", order.getOrderNo());
+        wsData.put("title", order.getTitle());
+        wsData.put("alarmId", alarmRecord.getId());
+        wsMsg.put("event", "workorder_new");
+        wsMsg.put("data", wsData);
+        wsMsg.put("time", LocalDateTime.now().toString());
+        alarmWebSocketHandler.sendToUser(handleUser, wsMsg);
     }
 }

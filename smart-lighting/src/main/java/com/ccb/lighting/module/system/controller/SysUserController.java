@@ -97,4 +97,9 @@ public class SysUserController {
         sysUserService.assignRoles(id, roleIds);
         return Result.success();
     }
+
+    @GetMapping("/list-by-role")
+    public Result<List<SysUser>> listByRoleCode(@RequestParam String roleCode) {
+        return Result.success(sysUserService.listByRoleCode(roleCode));
+    }
 }

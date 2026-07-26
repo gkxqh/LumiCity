@@ -357,6 +357,7 @@ CREATE TABLE work_order (
     order_type   VARCHAR(20)   NOT NULL COMMENT '类型：INSPECT巡检/REPAIR维修',
     title        VARCHAR(200)  NOT NULL COMMENT '标题',
     description  VARCHAR(1000)           COMMENT '描述',
+    alarm_id     BIGINT                  COMMENT '关联告警ID（告警自动生成工单时填写）',
     device_id    VARCHAR(50)            COMMENT '设备ID',
     pole_id      BIGINT                  COMMENT '灯杆ID',
     assignee_id  BIGINT                  COMMENT '指派人ID',
@@ -370,6 +371,7 @@ CREATE TABLE work_order (
     deleted      TINYINT       DEFAULT 0 COMMENT '逻辑删除：0未删 1已删',
     PRIMARY KEY (id),
     UNIQUE KEY uk_order_no (order_no),
+    KEY idx_alarm_id (alarm_id),
     KEY idx_order_type (order_type),
     KEY idx_assignee_id (assignee_id),
     KEY idx_status (status)

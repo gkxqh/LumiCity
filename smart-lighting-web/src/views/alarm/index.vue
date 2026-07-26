@@ -154,10 +154,19 @@
         <!-- 模式一：分配处理人（未处理 → 处理中） -->
         <template v-if="dialogMode === 'assign'">
           <el-form-item label="处理人" prop="handleUser">
-            <el-input
+            <el-select
               v-model="form.handleUser"
-              placeholder="请输入处理人姓名 / 工号"
-            />
+              placeholder="请选择运维人员"
+              filterable
+              style="width: 100%"
+            >
+              <el-option
+                v-for="user in operatorUsers"
+                :key="user.username"
+                :label="user.nickname || user.username"
+                :value="user.username"
+              />
+            </el-select>
           </el-form-item>
         </template>
 
@@ -209,7 +218,7 @@
 import { ref, reactive, computed, onMounted, onUnmounted } from 'vue'
 import { ElMessage, ElNotification } from 'element-plus'
 import { Search, Refresh, Edit, Bell, View } from '@element-plus/icons-vue'
-import { pageAlarm, addAlarm, handleAlarm } from '@/api/other'
+import { pageAlarm, addAlarm, handleAlarm, listUsersByRole } from '@/api/other'
 import { connectAlarmWS, onAlarmMessage, disconnectAlarmWS } from '@/api/ws'
 
 /* ---------------- 字典数据 ---------------- */
@@ -260,6 +269,9 @@ const tableData = ref([])
 const total = ref(0)
 const loading = ref(false)
 
+// 运维人员列表（供下拉选择分配处理人）
+const operatorUsers = ref([])
+
 // 加载告警分页数据
 async function loadData() {
   loading.value = true
@@ -286,6 +298,16 @@ function handleReset() {
   query.status = null
   query.current = 1
   loadData()
+}
+
+// 加载运维人员列表（供分配处理人下拉菜单使用）
+async function loadOperators() {
+  try {
+    const res = await listUsersByRole('INSPECTOR')
+    operatorUsers.value = res.data || []
+  } catch {
+    // 加载失败不影响主流程
+  }
 }
 
 /* ---------------- 处理弹窗（三模式） ---------------- */
@@ -430,6 +452,14 @@ function onAlarmWsMessage(msg) {
   } else if (msg.event === 'alarm_handled') {
     // 告警状态变更：静默刷新当前页
     loadData()
+  } else if (msg.event === 'workorder_new') {
+    const d = msg.data || {}
+    ElNotification({
+      title: '新工单已分配',
+      message: `工单 ${d.orderNo}：${d.title}`,
+      type: 'success',
+      duration: 6000
+    })
   }
 }
 
@@ -459,6 +489,7 @@ async function handleMockAlarm() {
 
 onMounted(() => {
   loadData()
+  loadOperators()
   connectAlarmWS()
   unsubAlarm = onAlarmMessage(onAlarmWsMessage)
 })
