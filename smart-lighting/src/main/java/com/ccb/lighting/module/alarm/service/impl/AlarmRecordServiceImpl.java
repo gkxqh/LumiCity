@@ -129,8 +129,6 @@ public class AlarmRecordServiceImpl implements AlarmRecordService {
         if (status == null || (status != 1 && status != 2)) {
             throw new BusinessException("status 仅支持 1 处理中 或 2 已闭环");
         }
-        //新增功能：自动创建工单
-        workOrderService.createFromAlarm(record, handleUser);
 
         // 3. 更新字段：状态、处理人、处理时间
         if(status == 1){
@@ -140,10 +138,17 @@ public class AlarmRecordServiceImpl implements AlarmRecordService {
             }
             record.setHandleUser(handleUser);
             record.setStatus(1);
+            //新增功能：自动创建工单
+            workOrderService.createFromAlarm(record, handleUser);
         } else {
             //不允许处理结果为空
             if(handleResult == null || handleResult.isBlank()){
                 throw new BusinessException("处理结果不能为空！");
+            }
+            //校验关联工单是否已经完成
+            WorkOrder related = workOrderService.getByAlarmId(record.getId());
+            if(related != null && related.getStatus() != 2){
+                throw new BusinessException("关联工单未完成，无法处理告警！");
             }
             record.setHandleResult(handleResult);
             record.setHandleTime(LocalDateTime.now());

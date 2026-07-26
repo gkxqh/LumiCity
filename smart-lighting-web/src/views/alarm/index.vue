@@ -218,7 +218,7 @@
 import { ref, reactive, computed, onMounted, onUnmounted } from 'vue'
 import { ElMessage, ElNotification } from 'element-plus'
 import { Search, Refresh, Edit, Bell, View } from '@element-plus/icons-vue'
-import { pageAlarm, addAlarm, handleAlarm, listUsersByRole } from '@/api/other'
+import { pageAlarm, addAlarm, handleAlarm, listUsersByRole, getWorkOrderByAlarm } from '@/api/other'
 import { connectAlarmWS, onAlarmMessage, disconnectAlarmWS } from '@/api/ws'
 
 /* ---------------- 字典数据 ---------------- */
@@ -370,11 +370,22 @@ function openAssign(row) {
 }
 
 // 打开「编写处理意见」：处理中(1) → 已闭环(2)
-function openHandle(row) {
+// 先检查关联工单是否已完成，未完成则阻拦
+async function openHandle(row) {
   resetForm()
   form.id = row.id
   form.deviceName = row.deviceName
   form.alarmContent = row.alarmContent
+  try {
+    const res = await getWorkOrderByAlarm(row.id)
+    const workOrder = res.data
+    if (workOrder && workOrder.status < 2) {
+      ElMessage.warning('关联工单尚未完成，请待巡检人员处理完毕后，再填写处理意见')
+      return
+    }
+  } catch {
+    // 查不到工单或接口失败，不影响
+  }
   dialogMode.value = 'handle'
   dialogVisible.value = true
 }
@@ -423,6 +434,8 @@ async function handleSubmit() {
     }
     dialogVisible.value = false
     loadData()
+  } catch (e) {
+    ElMessage.error(e.message || '操作失败')
   } finally {
     submitting.value = false
   }
@@ -460,6 +473,15 @@ function onAlarmWsMessage(msg) {
       type: 'success',
       duration: 6000
     })
+  } else if (msg.event === 'workorder_finished') {
+    const d = msg.data || {}
+    ElNotification({
+      title: '工单已完成，请编写处理意见',
+      message: `工单 ${d.orderNo}：${d.title} 已处理完毕，请前往告警页面编写处理意见`,
+      type: 'info',
+      duration: 8000
+    })
+    loadData()
   }
 }
 

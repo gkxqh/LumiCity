@@ -10,6 +10,7 @@ import com.ccb.lighting.handler.AlarmWebSocketHandler;
 import com.ccb.lighting.module.alarm.entity.AlarmRecord;
 import com.ccb.lighting.module.system.entity.SysUser;
 import com.ccb.lighting.module.system.service.SysUserService;
+import com.ccb.lighting.module.workorder.dto.WorkOrderQueryDTO;
 import com.ccb.lighting.module.workorder.entity.WorkOrder;
 import com.ccb.lighting.module.workorder.mapper.WorkOrderMapper;
 import com.ccb.lighting.module.workorder.service.WorkOrderService;
@@ -109,20 +110,40 @@ public class WorkOrderServiceImpl implements WorkOrderService {
     }
 
     /**
-     * 处理工单
-     * 状态推进到 1 处理中（兼容从待处理状态直接进入处理中）
+     * 处理工单（处理即完成）
+     * 填写处理备注后，状态从 1 处理中 直接推进到 2 已完成，
+     * 记录处理备注和完成时间；
+     * 若为告警关联工单，广播 workorder_finished 给运维人员
      */
     @Override
-    public void handle(Long id) {
+    public void handle(Long id, String handleRemark) {
         WorkOrder order = workOrderMapper.selectById(id);
         if (order == null) {
             throw new BusinessException(ResultCode.DATA_NOT_FOUND);
         }
-        // 已完成或已验收不可再处理
-        if (order.getStatus() != null && order.getStatus() >= 2) {
-            throw new BusinessException("工单已完成，不可再处理");
+        // 仅处理中状态可处理完成
+        if (order.getStatus() == null || order.getStatus() != 1) {
+            throw new BusinessException("仅处理中状态工单可处理");
         }
-        order.setStatus(1);
+        // 保存处理备注
+        order.setHandleRemark(handleRemark);
+        order.setStatus(2);
+        order.setFinishTime(LocalDateTime.now());
+        // 如果是告警关联的工单，推送完成通知给运维人员
+        if (order.getAlarmId() != null) {
+            Map<String, Object> wsMsg = new HashMap<>();
+            Map<String, Object> wsData = new HashMap<>();
+            wsData.put("id", order.getId());
+            wsData.put("orderNo", order.getOrderNo());
+            wsData.put("title", order.getTitle());
+            wsData.put("alarmId", order.getAlarmId());
+            wsData.put("handleRemark", handleRemark);
+            wsMsg.put("event", "workorder_finished");
+            wsMsg.put("data", wsData);
+            wsMsg.put("time", LocalDateTime.now().toString());
+            // 推送给所有在线用户（运维人员会收到）
+            alarmWebSocketHandler.broadcast(wsMsg);
+        }
         workOrderMapper.updateById(order);
     }
 
@@ -139,6 +160,20 @@ public class WorkOrderServiceImpl implements WorkOrderService {
         // 状态校验：仅处理中状态可完成
         if (order.getStatus() == null || order.getStatus() != 1) {
             throw new BusinessException("仅处理中状态工单可完成");
+        }
+        // 如果是告警关联的工单，推送完成通知给运维人员
+        if (order.getAlarmId() != null) {
+            Map<String, Object> wsMsg = new HashMap<>();
+            Map<String, Object> wsData = new HashMap<>();
+            wsData.put("id", order.getId());
+            wsData.put("orderNo", order.getOrderNo());
+            wsData.put("title", order.getTitle());
+            wsData.put("alarmId", order.getAlarmId());
+            wsMsg.put("event", "workorder_finished");
+            wsMsg.put("data", wsData);
+            wsMsg.put("time", LocalDateTime.now().toString());
+            // 推送给所有在线用户（运维人员会收到）
+            alarmWebSocketHandler.broadcast(wsMsg);
         }
         order.setStatus(2);
         order.setFinishTime(LocalDateTime.now());
@@ -187,5 +222,31 @@ public class WorkOrderServiceImpl implements WorkOrderService {
         wsMsg.put("data", wsData);
         wsMsg.put("time", LocalDateTime.now().toString());
         alarmWebSocketHandler.sendToUser(handleUser, wsMsg);
+    }
+
+    @Override
+    public WorkOrder getByAlarmId(Long alarmId) {
+        LambdaQueryWrapper<WorkOrder> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(WorkOrder::getAlarmId, alarmId);
+        return workOrderMapper.selectOne(wrapper);
+    }
+
+    @Override
+    public IPage<WorkOrder> pageListByQuery(WorkOrderQueryDTO query) {
+        LambdaQueryWrapper<WorkOrder> wrapper = new LambdaQueryWrapper<>();
+        if(query.getOrderType()!=null && !query.getOrderType().isEmpty()){
+            wrapper.eq(WorkOrder::getOrderType,query.getOrderType());
+        }
+        if(query.getStatus() != null){
+            wrapper.eq(WorkOrder::getStatus,query.getStatus());
+        }
+        if(query.getDeviceId()!=null && !query.getDeviceId().isEmpty()){
+            wrapper.eq(WorkOrder::getDeviceId,query.getDeviceId());
+        }
+
+        wrapper.orderByDesc(WorkOrder::getCreateTime);
+
+        return workOrderMapper.selectWorkOrderPage(new Page<>(query.getCurrent(), query.getSize()), query);
+
     }
 }

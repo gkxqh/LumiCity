@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.ccb.lighting.common.PageQuery;
 import com.ccb.lighting.module.alarm.entity.AlarmRecord;
 import com.ccb.lighting.module.system.entity.SysUser;
+import com.ccb.lighting.module.workorder.dto.WorkOrderQueryDTO;
 import com.ccb.lighting.module.workorder.entity.WorkOrder;
 
 import java.util.List;
@@ -56,11 +57,13 @@ public interface WorkOrderService {
 
     /**
      * 处理工单
-     * 运维人员接单后开始处理，状态推进到 1 处理中
+     * 填写处理备注后，状态从 1 处理中 推进到 2 已完成，记录完成时间；
+     * 告警关联工单同时广播 WebSocket workorder_finished 事件
      *
-     * @param id 工单 ID
+     * @param id            工单 ID
+     * @param handleRemark  处理备注（处理过程/结果描述）
      */
-    void handle(Long id);
+    void handle(Long id, String handleRemark);
 
     /**
      * 完成工单
@@ -79,4 +82,12 @@ public interface WorkOrderService {
      *
      */
     void createFromAlarm(AlarmRecord alarmRecord,String handleUser);
+
+    /**
+     * 根据告警ID查询关联工单
+     * 告警页面写处理意见时，需检验工单是否已完成
+     */
+    WorkOrder getByAlarmId(Long alarmId);
+
+    IPage<WorkOrder> pageListByQuery(WorkOrderQueryDTO query);
 }
