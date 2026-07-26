@@ -14,5 +14,7 @@ public class WorkOrderQueryDTO extends PageQuery {
 
     private String deviceId;
 
+    private Integer alarmId;
+
 
 }

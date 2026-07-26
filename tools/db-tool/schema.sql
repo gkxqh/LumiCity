@@ -348,7 +348,7 @@ CREATE TABLE led_program (
 
 -- -----------------------------------------------------------------------------
 -- work_order 工单表
--- 设备故障/巡检任务的运维工单，形成 创建→派单→处理→完成→验收 闭环
+-- 设备故障/巡检任务的运维工单，形成 创建→派单→处理→完成 闭环
 -- -----------------------------------------------------------------------------
 DROP TABLE IF EXISTS work_order;
 CREATE TABLE work_order (
@@ -362,8 +362,9 @@ CREATE TABLE work_order (
     pole_id      BIGINT                  COMMENT '灯杆ID',
     assignee_id  BIGINT                  COMMENT '指派人ID',
     priority     TINYINT       DEFAULT 2 COMMENT '优先级：1高 2中 3低',
-    status       TINYINT       DEFAULT 0 COMMENT '状态：0待处理 1处理中 2已完成 3已验收',
+    status       TINYINT       DEFAULT 0 COMMENT '状态：0待处理 1处理中 2已完成',
     finish_time  DATETIME                COMMENT '完成时间',
+    handle_remark VARCHAR(1000)          COMMENT '处理备注（处理工单时填写）',
     create_time  DATETIME                COMMENT '创建时间',
     update_time  DATETIME                COMMENT '更新时间',
     create_by    BIGINT                  COMMENT '创建人',

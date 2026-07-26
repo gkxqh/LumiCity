@@ -35,6 +35,8 @@ public interface WorkOrderMapper extends BaseMapper<WorkOrder> {
             "<if test='query.orderType != null and query.orderType != \"\"'> AND order_type = #{query.orderType} </if>",
             "<if test='query.status != null'> AND status = #{query.status} </if>",
             "<if test='query.deviceId != null and query.deviceId != \"\"'> AND device_id LIKE CONCAT('%', #{query.deviceId}, '%') </if>",
+            "<if test='query.alarmId != null and query.alarmId == 0'> AND alarm_id IS NULL </if>",
+            "<if test='query.alarmId != null and query.alarmId == 1'> AND alarm_id IS NOT NULL </if>",
             "ORDER BY create_time DESC",
             "</script>"
     })

@@ -38,7 +38,6 @@ public class WorkOrderServiceImpl implements WorkOrderService {
 
     /** 工单 Mapper，构造器注入 */
     private final WorkOrderMapper workOrderMapper;
-
     private final AlarmWebSocketHandler alarmWebSocketHandler;
     private final SysUserService sysUserService;
 

@@ -40,7 +40,7 @@
         <el-form-item>
           <el-button type="primary" :icon="Search" @click="handleSearch">查询</el-button>
           <el-button :icon="Refresh" @click="handleReset">重置</el-button>
-          <el-button type="success" :icon="Plus" @click="openAdd">新增工单</el-button>
+          <el-button v-if="pageType === 'manual'" type="success" :icon="Plus" @click="openAdd">新增工单</el-button>
         </el-form-item>
       </el-form>
     </el-card>
@@ -233,15 +233,23 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted, watch } from 'vue'
+import { useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { Search, Refresh, Plus, Edit, User } from '@element-plus/icons-vue'
 import {
   pageWorkOrder,
   addWorkOrder,
   assignWorkOrder,
-  handleWorkOrder
+  handleWorkOrder,
+  listUsersByRole
 } from '@/api/other'
+
+const route = useRoute()
+
+// 当前页面类型：alarm=告警工单 / manual=运维创建工单
+const pageType = computed(() => route.meta?.type || 'alarm')
+const pageTitle = computed(() => pageType.value === 'alarm' ? '告警工单' : '运维创建工单')
 
 /* ---------------- 字典数据 ---------------- */
 
@@ -278,23 +286,32 @@ function priorityTagType(p) {
   return { 1: 'danger', 2: 'warning', 3: 'info' }[p] || 'info'
 }
 
-// 处理人下拉选项（实际项目应从用户接口获取，这里给出示例）
-const assigneeOptions = [
-  { label: '张三（维修一组）', value: 1001 },
-  { label: '李四（维修二组）', value: 1002 },
-  { label: '王五（巡检组）', value: 1003 },
-  { label: '赵六（外协）', value: 1004 }
-]
+// 处理人下拉选项（从后端加载巡检人员）
+const assigneeOptions = ref([])
+
+async function loadAssignees() {
+  try {
+    const res = await listUsersByRole('INSPECTOR')
+    // 后端返回 [{ id, username, nickname }]，前端显示 nickname，value 用 id
+    assigneeOptions.value = (res.data || []).map(user => ({
+      label: user.nickname || user.username,
+      value: user.id
+    }))
+  } catch {
+    // 加载失败不影响主流程
+  }
+}
 
 /* ---------------- 查询 & 表格 ---------------- */
 
-// 分页参数：对齐后端 WorkOrderQueryDTO（orderType / status / deviceId）
+// 分页参数：对齐后端 WorkOrderQueryDTO（orderType / status / deviceId / alarmId）
 const query = reactive({
   current: 1,
   size: 10,
   orderType: '',
   status: null,
-  deviceId: ''
+  deviceId: '',
+  alarmId: null
 })
 
 const tableData = ref([])
@@ -302,6 +319,8 @@ const total = ref(0)
 const loading = ref(false)
 
 async function loadData() {
+  // 根据页面类型自动设置 alarmId 过滤条件
+  query.alarmId = pageType.value === 'alarm' ? 1 : 0
   loading.value = true
   try {
     const res = await pageWorkOrder(query)
@@ -485,6 +504,12 @@ async function handleWorkOrderSubmit() {
 /* ---------------- 初始化 ---------------- */
 
 onMounted(() => {
+  loadData()
+  loadAssignees()
+})
+
+// 切换子菜单（告警工单/运维创建工单）时重新加载
+watch(() => route.meta?.type, () => {
   loadData()
 })
 </script>

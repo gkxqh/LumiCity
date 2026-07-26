@@ -362,7 +362,7 @@ CREATE TABLE work_order (
     pole_id      BIGINT                  COMMENT '灯杆ID',
     assignee_id  BIGINT                  COMMENT '指派人ID',
     priority     TINYINT       DEFAULT 2 COMMENT '优先级：1高 2中 3低',
-    status       TINYINT       DEFAULT 0 COMMENT '状态：0待处理 1处理中 2已完成 3已验收',
+    status       TINYINT       DEFAULT 0 COMMENT '状态：0待处理 1处理中 2已完成',
     handle_remark VARCHAR(1000)          COMMENT '处理备注（处理工单时填写）',
     finish_time  DATETIME                COMMENT '完成时间',
     create_time  DATETIME                COMMENT '创建时间',

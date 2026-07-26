@@ -105,6 +105,7 @@
               type="warning"
               link
               :icon="Edit"
+              :style="{ opacity: workorderDoneMap[row.id] ? 1 : 0.5 }"
               @click="openHandle(row)"
             >
               编写处理意见
@@ -269,6 +270,25 @@ const tableData = ref([])
 const total = ref(0)
 const loading = ref(false)
 
+// 存储每个告警关联工单的完成状态：key=告警ID, value=true(已完成) / false(未完成)
+const workorderDoneMap = reactive({})
+
+// 异步查询所有处理中告警的关联工单状态
+async function checkWorkorderStatus() {
+  // 清除旧状态
+  Object.keys(workorderDoneMap).forEach(k => delete workorderDoneMap[k])
+  const processingRows = tableData.value.filter(r => r.status === 1)
+  await Promise.all(processingRows.map(async row => {
+    try {
+      const res = await getWorkOrderByAlarm(row.id)
+      const wo = res.data
+      workorderDoneMap[row.id] = wo && wo.status >= 2
+    } catch {
+      workorderDoneMap[row.id] = false
+    }
+  }))
+}
+
 // 运维人员列表（供下拉选择分配处理人）
 const operatorUsers = ref([])
 
@@ -284,6 +304,8 @@ async function loadData() {
   } finally {
     loading.value = false
   }
+  // 数据加载完毕后，异步查询处理中告警的工单状态
+  checkWorkorderStatus()
 }
 
 // 点击查询：回到第一页后重新加载
