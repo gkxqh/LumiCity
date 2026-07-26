@@ -97,7 +97,7 @@ class DataGenerator:
     def clear(self):
         # 先删业务表（引用设备/灯杆），再删设备/灯杆
         for t in ["energy_record", "alarm_record", "env_sensor_data", "work_order",
-                  "led_program", "light_strategy", "video_camera", "dev_device", "dev_pole"]:
+                  "led_publish_log", "led_program", "light_strategy", "video_camera", "dev_device", "dev_pole"]:
             self.cur.execute(f"DELETE FROM {t}")
         # 清理角色菜单绑定并重置 OPERATOR 权限
         self.cur.execute("DELETE FROM sys_role_menu WHERE role_id > 2")

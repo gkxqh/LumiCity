@@ -335,6 +335,7 @@ CREATE TABLE led_program (
     start_time  DATETIME               COMMENT '开始时间',
     end_time    DATETIME               COMMENT '结束时间',
     status      TINYINT      DEFAULT 0 COMMENT '状态：0待发布 1已发布 2已下线',
+    publish_time DATETIME              COMMENT '最近发布时间',
     create_time DATETIME               COMMENT '创建时间',
     update_time DATETIME               COMMENT '更新时间',
     create_by   BIGINT                 COMMENT '创建人',
@@ -373,6 +374,32 @@ CREATE TABLE work_order (
     KEY idx_assignee_id (assignee_id),
     KEY idx_status (status)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='工单表';
+
+-- -----------------------------------------------------------------------------
+-- led_publish_log LED节目发布记录表
+-- 记录每次发布的详细信息，用于发布历史追溯与效果验证
+-- -----------------------------------------------------------------------------
+DROP TABLE IF EXISTS led_publish_log;
+CREATE TABLE led_publish_log (
+    id              BIGINT       NOT NULL AUTO_INCREMENT COMMENT '主键ID',
+    program_id      BIGINT       NOT NULL COMMENT '节目ID',
+    program_name    VARCHAR(100) NOT NULL COMMENT '节目名称（冗余，避免join）',
+    media_type      VARCHAR(20)  NOT NULL COMMENT '媒体类型：TEXT/IMAGE/VIDEO',
+    content_preview VARCHAR(200)          COMMENT '内容预览（文本截取/文件名）',
+    operator        VARCHAR(50)           COMMENT '操作人用户名',
+    operator_id     BIGINT                COMMENT '操作人用户ID',
+    publish_time    DATETIME     NOT NULL COMMENT '发布时间',
+    push_status     VARCHAR(20)  DEFAULT 'SUCCESS' COMMENT '推送状态：SUCCESS成功 / FAIL失败',
+    push_message    VARCHAR(500)          COMMENT '推送结果描述',
+    create_time     DATETIME              COMMENT '创建时间',
+    update_time     DATETIME              COMMENT '更新时间',
+    create_by       BIGINT                COMMENT '创建人',
+    update_by       BIGINT                COMMENT '更新人',
+    deleted         TINYINT      DEFAULT 0 COMMENT '逻辑删除：0未删 1已删',
+    PRIMARY KEY (id),
+    KEY idx_program_id (program_id),
+    KEY idx_publish_time (publish_time)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='LED节目发布记录表';
 
 -- =============================================================================
 -- 4. 初始数据

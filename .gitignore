@@ -10,3 +10,5 @@ Thumbs.db
 logs/
 *.log
 **/.workbuddy/
+/学生实训提交成果物/
+/docs/
