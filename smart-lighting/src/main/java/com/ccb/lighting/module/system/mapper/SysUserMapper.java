@@ -63,4 +63,15 @@ public interface SysUserMapper extends BaseMapper<SysUser> {
     @Insert("INSERT INTO sys_user_role(user_id, role_id, create_time, update_time) " +
             "VALUES(#{userId}, #{roleId}, NOW(), NOW())")
     void insertUserRole(@Param("userId") Long userId, @Param("roleId") Long roleId);
+
+    /**
+     * 根据角色编码查询所有用户（如查询所有 OPERATOR 运维人员）
+     */
+    @Select("SELECT su.* FROM sys_user su " +
+            "INNER JOIN sys_user_role ur ON su.id = ur.user_id " +
+            "INNER JOIN sys_role r ON ur.role_id = r.id " +
+            "WHERE r.role_code = #{roleCode} " +
+            "AND su.deleted = 0 AND r.deleted = 0 " +
+            "AND su.status = 1")
+    List<SysUser> selectUsersByRoleCode(@Param("roleCode") String roleCode);
 }

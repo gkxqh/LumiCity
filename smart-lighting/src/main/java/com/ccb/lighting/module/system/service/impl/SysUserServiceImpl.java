@@ -156,4 +156,9 @@ public class SysUserServiceImpl implements SysUserService {
             }
         }
     }
+
+    @Override
+    public List<SysUser> listByRoleCode(String roleCode) {
+        return sysUserMapper.selectUsersByRoleCode(roleCode);
+    }
 }

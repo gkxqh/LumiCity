@@ -134,6 +134,9 @@ export function finishWorkOrder(id) {
 }
 
 // ========== 系统管理 ==========
+export function listUsersByRole(roleCode) {
+  return request({ url: '/system/user/list-by-role', method: 'get', params: { roleCode } })
+}
 export function pageUser(params) {
   return request({ url: '/system/user/page', method: 'get', params })
 }
