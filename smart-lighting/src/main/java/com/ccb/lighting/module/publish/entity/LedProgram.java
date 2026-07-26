@@ -1,5 +1,6 @@
 package com.ccb.lighting.module.publish.entity;
 
+import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableName;
 import com.ccb.lighting.common.BaseEntity;
 import jakarta.validation.constraints.NotBlank;
@@ -13,7 +14,7 @@ import java.time.LocalDateTime;
 /**
  * LED 节目实体 LedProgram
  *
- * <p>智慧城市灯杆常挂载 LED 屏，用于发布公共信息、应急通知、广告等。
+ * <p>灯杆挂载 LED 屏，用于发布公共信息、应急通知、广告等。
  * 本表管理 LED 屏要播放的节目内容、播放模式、发布状态。</p>
  *
  * <p>节目生命周期：创建（待发布）→ 发布（已发布）→ 下线（已下线）</p>
@@ -69,6 +70,13 @@ public class LedProgram extends BaseEntity implements Serializable {
 
     /** 结束时间：节目失效时间，到点自动下线 */
     private LocalDateTime endTime;
+
+    /** 最近发布时间：最后一次 publish 操作的时间，用于展示发布记录 */
+    private LocalDateTime publishTime;
+
+    /** 关联的设备名称（LedProgramMapper XML 中 left join dev_device 带回，非数据库字段） */
+    @TableField(exist = false)
+    private String screenName;
 
     /**
      * 状态：

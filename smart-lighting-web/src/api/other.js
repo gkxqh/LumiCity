@@ -115,6 +115,21 @@ export function deleteProgram(id) {
 export function publishProgram(id) {
   return request({ url: `/publish/program/${id}/publish`, method: 'put' })
 }
+export function programLogs(id, params) {
+  return request({ url: `/publish/program/${id}/logs`, method: 'get', params })
+}
+
+// ========== 通用文件上传 ==========
+export function uploadFile(file) {
+  const formData = new FormData()
+  formData.append('file', file)
+  return request({
+    url: '/common/upload',
+    method: 'post',
+    data: formData,
+    timeout: 120000 // 视频上传最多等 2 分钟
+  })
+}
 
 // ========== 工单运维 ==========
 export function pageWorkOrder(params) {
