@@ -24,8 +24,8 @@ spring:
     default-property-inclusion: non_null
   servlet:
     multipart:
-      max-file-size: 10MB
-      max-request-size: 50MB
+      max-file-size: 200MB
+      max-request-size: 500MB
 
 mybatis-plus:
   mapper-locations: classpath:/mapper/**/*.xml
@@ -65,6 +65,6 @@ logging:
 lighting:
   name: 智慧城市照明综合控制系统
   version: 1.0.0
-  upload-path: /data/lighting/uploads
+  upload-path: /Users/neko/IdeaProjects/LumiCity/uploads
   alarm-push-enabled: true
   default-page-size: 10

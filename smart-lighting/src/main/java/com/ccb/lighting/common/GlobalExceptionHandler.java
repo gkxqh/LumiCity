@@ -2,11 +2,13 @@ package com.ccb.lighting.common;
 
 import jakarta.validation.ConstraintViolationException;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.catalina.connector.ClientAbortException;
 import org.springframework.validation.BindException;
 import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
 
 import java.util.stream.Collectors;
 
@@ -52,6 +54,21 @@ public class GlobalExceptionHandler {
                 .map(v -> v.getMessage())
                 .collect(Collectors.joining("; "));
         return Result.error(ResultCode.PARAM_ERROR.getCode(), msg);
+    }
+
+    /** 上传文件大小超限 */
+    @ExceptionHandler(MaxUploadSizeExceededException.class)
+    public Result<Void> handleMaxUploadSize(MaxUploadSizeExceededException e) {
+        long maxSize = e.getMaxUploadSize();
+        String sizeStr = maxSize > 0 ? (maxSize / (1024 * 1024) + "MB") : "未知";
+        log.warn("上传文件大小超过限制（上限={}）", sizeStr);
+        return Result.error("文件大小超过上限（" + sizeStr + "），请压缩后重试");
+    }
+
+    /** 客户端提前断开连接（预览视频时关闭页面/弹窗）—— 静默忽略，无需返回 */
+    @ExceptionHandler(ClientAbortException.class)
+    public void handleClientAbort(ClientAbortException e) {
+        log.debug("客户端提前断开连接: {}", e.getMessage());
     }
 
     /** 兜底：所有未捕获的异常 */

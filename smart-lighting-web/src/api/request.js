@@ -27,17 +27,16 @@ service.interceptors.response.use(
     if (res.code === 200) {
       return res
     } else {
-      ElMessage.error(res.message || '请求失败')
       if (res.code === 401) {
         removeToken()
         router.push('/login')
       }
-      return Promise.reject(new Error(res.message))
+      return Promise.reject(new Error(res.message || '请求失败'))
     }
   },
   error => {
-    ElMessage.error(error.message || '网络异常')
-    return Promise.reject(error)
+    const msg = error.response?.data?.message || error.message || '网络异常'
+    return Promise.reject(new Error(msg))
   }
 )
 
