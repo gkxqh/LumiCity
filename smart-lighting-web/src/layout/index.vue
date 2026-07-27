@@ -130,6 +130,6 @@ async function handleCommand(cmd) {
 .header-left { display: flex; align-items: center; gap: 16px; }
 .collapse-btn { cursor: pointer; }
 .header-right .user-info { display: flex; align-items: center; gap: 4px; cursor: pointer; color: #333; }
-.el-main { background-color: #f0f2f5; padding: 16px; }
+.el-main { background-color: #f0f2f5; padding: 16px; display: flex; flex-direction: column; }
 .el-menu { border-right: none; }
 </style>

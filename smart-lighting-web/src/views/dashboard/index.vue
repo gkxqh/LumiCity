@@ -1,9 +1,6 @@
 <!--
-  数据大盘（大屏版）
-  - 顶部：标题 + 实时时钟
-  - 第二行：6 个核心指标卡片（带图标水印 + 等宽数字）
-  - 中间：实时告警滚动（带状态指示灯）
-  - 底部：告警趋势 / 能耗趋势 / 设备类型 / 告警分类 四张图表（深色主题适配）
+  数据大盘（大屏版）- 重构布局
+  顶部栏 + 左(Leaflet地图+Three.js 3D叠加) | 右(3×2统计卡片+实时告警) + 底(4张ECharts图表)
 -->
 <template>
   <div class="dashboard-page">
@@ -32,24 +29,32 @@
       </div>
     </div>
 
-    <!-- ============ 指标卡片行 ============ -->
-    <el-row :gutter="12" class="stat-row">
-      <el-col :xs="8" :sm="8" :md="4" v-for="card in statCards" :key="card.key">
-        <div :class="['stat-card', 'stat--' + card.color]">
-          <div class="stat-watermark">{{ card.icon }}</div>
-          <div class="stat-label">{{ card.label }}</div>
-          <div class="stat-value">{{ formatStat(card.key, overview[card.key]) }}</div>
-          <div v-if="card.extra" class="stat-extra">{{ card.extra }}</div>
+    <!-- ============ 中间区域：左地图 + 右统计/告警 ============ -->
+    <div class="mid-section">
+      <!-- 左：地图 + 3D 叠加 -->
+      <div class="mid-left">
+        <div class="map-wrapper">
+          <MapPanel ref="mapPanelRef" :poles="poleList" @map-ready="onMapReady" />
+          <ThreeDEffects v-if="leafletMap" :map="leafletMap" :poles="poleList" />
         </div>
-      </el-col>
-    </el-row>
+      </div>
 
-    <!-- ============ 中间区域：实时告警 ============ -->
-    <el-row :gutter="12" class="mid-row">
-      <el-col :span="24">
-        <div class="section-card">
-          <div class="section-title-bar">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+      <!-- 右：统计卡片 + 告警 -->
+      <div class="mid-right">
+        <!-- 3×2 统计卡片网格 -->
+        <div class="stat-grid">
+          <div v-for="card in statCards" :key="card.key" :class="['stat-card', 'stat--' + card.color]">
+            <div class="stat-watermark">{{ card.icon }}</div>
+            <div class="stat-label">{{ card.label }}</div>
+            <div class="stat-value">{{ formatStat(card.key, overview[card.key]) }}</div>
+            <div v-if="card.extra" class="stat-extra">{{ card.extra }}</div>
+          </div>
+        </div>
+
+        <!-- 实时告警 -->
+        <div class="alarm-section">
+          <div class="alarm-title-bar">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
               <path d="M12 2L2 18h20L12 2zM12 6v6M12 16h.01"/>
             </svg>
             <span>实时告警</span>
@@ -68,10 +73,10 @@
             <div v-if="!alarmList.length" class="empty-hint">暂无告警记录</div>
           </div>
         </div>
-      </el-col>
-    </el-row>
+      </div>
+    </div>
 
-    <!-- ============ 图表行 ============ -->
+    <!-- ============ 底部：图表行 ============ -->
     <el-row :gutter="12" class="chart-row">
       <el-col :xs="24" :md="12" :lg="6">
         <div class="chart-card-item">
@@ -123,7 +128,10 @@ import {
   getAlarmCategory,
   getLatestAlarm,
 } from '@/api/other'
+import { listPole } from '@/api/device'
 import { connectAlarmWS, onAlarmMessage, disconnectAlarmWS } from '@/api/ws'
+import MapPanel from '@/components/MapPanel.vue'
+import ThreeDEffects from '@/components/ThreeDEffects.vue'
 
 /* ---------------- 指标卡片配置 ---------------- */
 
@@ -136,12 +144,28 @@ const statCards = [
   { key: 'workOrderToday', label: '今日工单', icon: '📋', color: 'cyan', extra: '' }
 ]
 
+/* ---------------- 地图 / 3D ---------------- */
+
+const mapPanelRef = ref(null)
+const leafletMap = ref(null)
+const poleList = ref([])
+
+function onMapReady(mapInstance) {
+  leafletMap.value = mapInstance
+}
+
+async function loadPoles() {
+  try {
+    const res = await listPole()
+    poleList.value = res.data || []
+  } catch (e) { /* 静默 */ }
+}
+
 /* ---------------- 顶栏 ---------------- */
 
 const clockText = ref('')
 let clockTimer = null
 
-// 从 layout 注入侧边栏折叠控制
 const sidebarCollapse = inject('sidebarCollapse', null)
 function toggleSidebar() {
   if (sidebarCollapse && sidebarCollapse.value !== undefined) {
@@ -155,11 +179,9 @@ function updateClock() {
   clockText.value = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`
 }
 
-
-// 数据格式化：数字保留 1 位小数，百分数原样显示
 function formatStat(key, val) {
   if (val == null) return 0
-  if (key === 'onlineRate') return val // 已经是 "95.00%"
+  if (key === 'onlineRate') return val
   if (typeof val === 'number' || typeof val === 'string') {
     const n = Number(val)
     if (!isNaN(n)) {
@@ -205,7 +227,6 @@ async function loadLatestAlarm() {
   } catch (e) { /* 静默 */ }
 }
 
-// WebSocket 新告警回调
 function onAlarmWsMessage(msg) {
   if (!msg || msg.event !== 'alarm_new') return
   const d = msg.data || {}
@@ -242,7 +263,6 @@ let energyChart = null
 let typeChart = null
 let categoryChart = null
 
-// ---------- 告警趋势 ----------
 async function loadAlarmTrend() {
   try {
     const res = await getAlarmTrend(7)
@@ -267,7 +287,6 @@ async function loadAlarmTrend() {
   } catch (e) { /* 静默 */ }
 }
 
-// ---------- 能耗趋势 ----------
 async function loadEnergyTrend() {
   try {
     const res = await getEnergyTrend(7)
@@ -292,7 +311,6 @@ async function loadEnergyTrend() {
   } catch (e) { /* 静默 */ }
 }
 
-// ---------- 设备类型分布（饼图） ----------
 async function loadDeviceTypeDist() {
   try {
     const res = await getDeviceTypeDist()
@@ -318,7 +336,6 @@ async function loadDeviceTypeDist() {
   } catch (e) { /* 静默 */ }
 }
 
-// ---------- 告警分类（柱状图） ----------
 async function loadAlarmCategory() {
   try {
     const res = await getAlarmCategory()
@@ -365,14 +382,20 @@ function startPolling() {
   pollTimer = setInterval(() => {
     loadOverview()
     loadLatestAlarm()
+    loadPoles()
   }, 30000)
 }
 
 /* ---------------- 生命周期 ---------------- */
 
+let unsubAlarm = null
+
 onMounted(async () => {
   updateClock()
   clockTimer = setInterval(updateClock, 1000)
+
+  // 加载灯杆数据（地图用）
+  await loadPoles()
 
   await nextTick()
   if (alarmChartRef.value) alarmChart = echarts.init(alarmChartRef.value)
@@ -389,18 +412,11 @@ onMounted(async () => {
     loadLatestAlarm()
   ])
 
-  loadAlarmTrend()
-  loadEnergyTrend()
-  loadDeviceTypeDist()
-  loadAlarmCategory()
-
   window.addEventListener('resize', handleResize)
   connectAlarmWS()
   unsubAlarm = onAlarmMessage(onAlarmWsMessage)
   startPolling()
 })
-
-let unsubAlarm = null
 
 onUnmounted(() => {
   window.removeEventListener('resize', handleResize)
@@ -422,15 +438,17 @@ onUnmounted(() => {
 <style scoped>
 /* ============ 基础大屏背景 ============ */
 .dashboard-page {
-  padding: 16px 20px;
+  padding: 12px 16px;
   background: linear-gradient(135deg, #0a1628 0%, #111d2e 50%, #0d1a2c 100%);
-  min-height: calc(100vh - 84px);
   color: #c8d6e5;
   position: relative;
-  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
 }
 
-/* 背景装饰网格线 */
 .dashboard-page::before {
   content: '';
   position: absolute;
@@ -448,7 +466,7 @@ onUnmounted(() => {
   z-index: 1;
 }
 
-/* ============ 顶部栏（带边框流光动画） ============ */
+/* ============ 顶部栏 ============ */
 @keyframes borderGlow {
   0%, 100% { border-color: rgba(64,158,255,0.2); box-shadow: 0 0 12px rgba(64,158,255,0.05); }
   50% { border-color: rgba(64,158,255,0.5); box-shadow: 0 0 20px rgba(64,158,255,0.12); }
@@ -458,11 +476,11 @@ onUnmounted(() => {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 14px 24px;
+  padding: 12px 22px;
   background: linear-gradient(135deg, rgba(26,34,56,0.95), rgba(18,26,46,0.95));
   border: 1px solid rgba(64,158,255,0.2);
   border-radius: 10px;
-  margin-bottom: 14px;
+  margin-bottom: 12px;
   color: #e8edf5;
   animation: borderGlow 4s ease-in-out infinite;
 }
@@ -470,7 +488,7 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   gap: 10px;
-  font-size: 19px;
+  font-size: 18px;
   font-weight: 600;
   letter-spacing: 2px;
 }
@@ -481,7 +499,7 @@ onUnmounted(() => {
 .d-header-right {
   display: flex;
   align-items: center;
-  gap: 20px;
+  gap: 18px;
   font-size: 13px;
 }
 .d-sys-info {
@@ -505,7 +523,7 @@ onUnmounted(() => {
 .d-clock {
   font-family: 'Courier New', monospace;
   color: #7ba7e0;
-  font-size: 15px;
+  font-size: 14px;
   letter-spacing: 1px;
 }
 .d-sidebar-btn {
@@ -525,27 +543,63 @@ onUnmounted(() => {
   color: #e8edf5;
 }
 
-/* ============ 指标卡片 ============ */
-.stat-row {
-  margin-bottom: 14px;
+/* ============ 中间区域：左地图 + 右统计/告警 - flex:1 撑满剩余空间 ============ */
+.mid-section {
+  display: flex;
+  gap: 12px;
+  flex: 1;
+  min-height: 0;
+  padding-bottom: 12px;
 }
+
+.mid-left {
+  flex: 0 0 60%;
+  position: relative;
+  min-height: 0;
+}
+.map-wrapper {
+  width: 100%;
+  height: 100%;
+  border-radius: 10px;
+  overflow: hidden;
+  position: relative;
+  border: 1px solid rgba(255,255,255,0.06);
+  background: rgba(255,255,255,0.02);
+}
+
+.mid-right {
+  flex: 0 0 calc(40% - 12px);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  overflow: hidden;
+  min-height: 0;
+}
+
+/* ============ 3×2 统计卡片网格 ============ */
+.stat-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: 1fr 1fr 1fr;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
 .stat-card {
   position: relative;
   overflow: hidden;
-  padding: 12px 14px;
-  border-radius: 10px;
+  padding: 8px 10px;
+  border-radius: 8px;
   background: rgba(255,255,255,0.04);
   border: 1px solid rgba(255,255,255,0.06);
   backdrop-filter: blur(4px);
   transition: border-color 0.3s, background 0.3s;
   text-align: center;
-  /* 所有卡片固定同高 + flex 居中，内容不一致也不影响 */
-  height: 110px;
-  box-sizing: border-box;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
+  min-height: 72px;
 }
 .stat-card:hover {
   border-color: rgba(255,255,255,0.15);
@@ -553,84 +607,77 @@ onUnmounted(() => {
 }
 .stat-watermark {
   position: absolute;
-  right: 6px;
-  bottom: 2px;
-  font-size: 50px;
+  right: 4px;
+  bottom: 0;
+  font-size: 36px;
   opacity: 0.08;
   line-height: 1;
   pointer-events: none;
   user-select: none;
 }
 .stat-label {
-  font-size: 12px;
+  font-size: 11px;
   color: rgba(200,214,229,0.6);
-  line-height: 1.4;
+  line-height: 1.3;
 }
 .stat-value {
   font-family: 'Courier New', monospace;
-  font-size: 26px;
+  font-size: 20px;
   font-weight: 700;
   color: #e8edf5;
   line-height: 1.3;
 }
 .stat-extra {
-  font-size: 11px;
+  font-size: 10px;
   color: rgba(200,214,229,0.35);
-  line-height: 1.2;
+  line-height: 1.1;
 }
 
-/* ============ 中间区域卡片 ============ */
-.mid-row {
-  margin-bottom: 14px;
-}
-.section-card {
-  height: 270px;
-  border-radius: 10px;
-  background: rgba(255,255,255,0.03);
-  border: 1px solid rgba(255,255,255,0.06);
-  padding: 0;
+/* ============ 实时告警区 ============ */
+.alarm-section {
+  flex: 1;
   display: flex;
   flex-direction: column;
+  border-radius: 8px;
+  background: rgba(255,255,255,0.03);
+  border: 1px solid rgba(255,255,255,0.06);
+  overflow: hidden;
 }
-.section-title-bar {
+.alarm-title-bar {
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 12px 16px;
-  font-size: 14px;
+  padding: 10px 14px 8px;
+  font-size: 13px;
   font-weight: 500;
   color: #a0b8d4;
   border-bottom: 1px solid rgba(255,255,255,0.05);
-}
-.section-title-bar svg {
   flex-shrink: 0;
 }
-.section-card .alarm-scroll {
-  flex: 1;
-  padding: 12px 16px;
+.alarm-title-bar svg {
+  flex-shrink: 0;
 }
-
-/* 告警列表 */
 .alarm-scroll {
+  flex: 1;
   overflow-y: auto;
-  padding: 0;
+  padding: 6px 14px 8px;
   scrollbar-width: thin;
   scrollbar-color: rgba(255,255,255,0.1) transparent;
 }
 .alarm-item {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 7px 0;
+  gap: 6px;
+  padding: 5px 0;
   border-bottom: 1px solid rgba(255,255,255,0.04);
-  font-size: 13px;
+  font-size: 12px;
 }
 .alarm-item:last-child {
   border-bottom: none;
 }
 .alarm-dot {
-  width: 7px;
-  height: 7px;
+  width: 6px;
+  height: 6px;
   border-radius: 50%;
   flex-shrink: 0;
 }
@@ -650,8 +697,8 @@ onUnmounted(() => {
 }
 .alarm-level {
   flex-shrink: 0;
-  font-size: 11px;
-  padding: 1px 6px;
+  font-size: 10px;
+  padding: 1px 5px;
   border-radius: 3px;
   color: #fff;
 }
@@ -661,7 +708,8 @@ onUnmounted(() => {
 .alarm-type {
   flex-shrink: 0;
   color: rgba(200,214,229,0.7);
-  min-width: 56px;
+  min-width: 48px;
+  font-size: 11px;
 }
 .alarm-device {
   flex: 1;
@@ -669,35 +717,36 @@ onUnmounted(() => {
   text-overflow: ellipsis;
   white-space: nowrap;
   color: #c8d6e5;
+  font-size: 11px;
 }
 .alarm-time {
   flex-shrink: 0;
   color: rgba(200,214,229,0.35);
-  font-size: 12px;
+  font-size: 11px;
   font-family: 'Courier New', monospace;
 }
 .empty-hint {
   text-align: center;
   color: rgba(200,214,229,0.3);
-  padding: 40px 0;
-  font-size: 14px;
+  padding: 24px 0;
+  font-size: 13px;
 }
 .alarm-badge {
   margin-left: auto;
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 400;
   color: #f56c6c;
   background: rgba(245,108,108,0.12);
-  padding: 2px 8px;
+  padding: 2px 6px;
   border-radius: 10px;
 }
 
-/* ============ 图表区 ============ */
+/* ============ 底部图表行 ============ */
 .chart-row {
+  flex-shrink: 0;
   margin-bottom: 0;
 }
 .chart-card-item {
-  margin-bottom: 14px;
   border-radius: 10px;
   background: rgba(255,255,255,0.03);
   border: 1px solid rgba(255,255,255,0.06);
@@ -707,18 +756,18 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 10px 16px 6px;
-  font-size: 13px;
+  padding: 8px 14px 4px;
+  font-size: 12px;
   font-weight: 500;
   color: #a0b8d4;
 }
 .chart-subtitle {
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 400;
   color: rgba(200,214,229,0.35);
 }
 .chart-box {
   width: 100%;
-  height: 200px;
+  height: 160px;
 }
 </style>
