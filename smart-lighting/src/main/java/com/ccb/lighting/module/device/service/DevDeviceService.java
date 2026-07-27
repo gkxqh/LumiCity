@@ -75,4 +75,12 @@ public interface DevDeviceService {
      * @param outputStream 输出流
      */
     void exportDevices(java.io.OutputStream outputStream);
+
+    /**
+     * 查询所有设备（不分页），仅返回 deviceCode + deviceName 等基本字段
+     * 用于模拟告警等场景前端需要获取全部设备列表
+     *
+     * @return 所有设备列表
+     */
+    java.util.List<DevDevice> listAll();
 }

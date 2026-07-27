@@ -160,6 +160,19 @@ public class DevDeviceServiceImpl implements DevDeviceService {
     }
 
     /**
+     * 查询所有设备（不分页）
+     * 用于模拟告警等场景前端需要随机选取设备
+     */
+    @Override
+    public List<DevDevice> listAll() {
+        return devDeviceMapper.selectList(
+                new LambdaQueryWrapper<DevDevice>()
+                        .select(DevDevice::getDeviceCode, DevDevice::getDeviceName)
+                        .orderByDesc(DevDevice::getCreateTime)
+        );
+    }
+
+    /**
      * 导出设备数据
      * 使用 EasyExcel 写入所有设备数据到输出流
      * 直接使用 DevDevice 实体（已添加 @ExcelProperty 注解），无需转换

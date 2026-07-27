@@ -26,6 +26,7 @@ import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -152,6 +153,15 @@ public class DevDeviceController {
         data.put("failReasons", result.getFailReasons());
 
         return Result.success("导入完成", data);
+    }
+
+    /**
+     * 查询所有设备（不分页）
+     * 返回所有设备的 deviceCode + deviceName，用于模拟告警等场景前端随机选取设备
+     */
+    @GetMapping("/listAll")
+    public Result<List<DevDevice>> listAll() {
+        return Result.success(devDeviceService.listAll());
     }
 
     /**
