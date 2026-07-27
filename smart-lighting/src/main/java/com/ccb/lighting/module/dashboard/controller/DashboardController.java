@@ -10,7 +10,6 @@ import com.ccb.lighting.module.device.mapper.DevDeviceMapper;
 import com.ccb.lighting.module.device.mapper.DevPoleMapper;
 import com.ccb.lighting.module.energy.entity.EnergyRecord;
 import com.ccb.lighting.module.energy.mapper.EnergyRecordMapper;
-import com.ccb.lighting.module.environment.mapper.EnvSensorDataMapper;
 import com.ccb.lighting.module.workorder.mapper.WorkOrderMapper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -49,7 +48,6 @@ public class DashboardController {
     private final DevPoleMapper devPoleMapper;
     private final EnergyRecordMapper energyRecordMapper;
     private final WorkOrderMapper workOrderMapper;
-    private final EnvSensorDataMapper envSensorDataMapper;
 
     private static final Map<String, String> DEVICE_TYPE_NAMES = Map.of(
             "LIGHT", "照明灯",
@@ -252,32 +250,6 @@ public class DashboardController {
         result.put("processing", statusMap.getOrDefault(1, 0L));
         result.put("completed", statusMap.getOrDefault(2, 0L));
         result.put("verified", statusMap.getOrDefault(3, 0L));
-        return Result.success(result);
-    }
-
-    /**
-     * 最新环境数据
-     *
-     * <p>返回最新一条环境记录，用于大屏环境快照卡片</p>
-     */
-    @GetMapping("/latest-env")
-    public Result<Map<String, Object>> latestEnv() {
-        var wrapper = new LambdaQueryWrapper<com.ccb.lighting.module.environment.entity.EnvSensorData>()
-                .orderByDesc(com.ccb.lighting.module.environment.entity.EnvSensorData::getRecordTime)
-                .last("LIMIT 1");
-        var latest = envSensorDataMapper.selectOne(wrapper);
-        if (latest == null) {
-            return Result.success(Map.of());
-        }
-
-        Map<String, Object> result = new LinkedHashMap<>();
-        result.put("temperature", latest.getTemperature());
-        result.put("humidity", latest.getHumidity());
-        result.put("pm25", latest.getPm25());
-        result.put("noise", latest.getNoise());
-        result.put("illumination", latest.getIllumination());
-        result.put("windSpeed", latest.getWindSpeed());
-        result.put("recordTime", latest.getRecordTime());
         return Result.success(result);
     }
 }

@@ -8,7 +8,6 @@
   - 幂等：先清空业务表与测试用户（保留 admin 及初始角色/菜单），再重新生成
 """
 import random
-import math
 from datetime import datetime, timedelta, time as dtime
 
 
@@ -66,7 +65,6 @@ ORDER_TYPES = ["INSPECT", "REPAIR"]
 ORDER_STATUS = [0, 1, 2]  # 待处理/处理中/已完成
 ORDER_STATUS_WEIGHTS = [20, 30, 50]
 
-WIND_DIRS = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"]
 LED_MEDIA = ["TEXT", "IMAGE", "VIDEO"]
 LED_STATUS = [0, 1, 2]  # 待发布/已发布/已下线
 
@@ -96,7 +94,7 @@ class DataGenerator:
     # ---------- 清空（保留 admin 与初始角色/菜单） ----------
     def clear(self):
         # 先删业务表（引用设备/灯杆），再删设备/灯杆
-        for t in ["energy_record", "alarm_record", "env_sensor_data", "work_order",
+        for t in ["energy_record", "alarm_record", "work_order",
                   "led_publish_log", "led_program", "light_strategy", "video_camera", "dev_device", "dev_pole"]:
             self.cur.execute(f"DELETE FROM {t}")
         # 清理角色菜单绑定并重置 OPERATOR 权限
@@ -349,47 +347,6 @@ class DataGenerator:
         self.conn.commit()
         self.counts["video_camera"] = cnt
 
-    # ---------- 环境传感器数据（时序，含昼夜变化） ----------
-    def gen_env(self, days=7):
-        sensors = [d for d in self._devices if d["type"] == "SENSOR"]
-        sample = random.sample(sensors, min(10, len(sensors))) if sensors else []
-        rows = []
-        base = self.now.replace(hour=0, minute=0, second=0, microsecond=0)
-        for dev in sample:
-            for d in range(days, 0, -1):
-                day = base - timedelta(days=d - 1)
-                day_temp_base = random.uniform(24, 30)
-                for h in range(0, 24, 1):
-                    t = day + timedelta(hours=h)
-                    # 温度：6-18点正弦上升，夜间下降
-                    temp = round(day_temp_base + 4 * math.sin(math.pi * (h - 6) / 12)
-                                 + random.uniform(-1.5, 1.5), 2) if 6 <= h <= 18 \
-                        else round(day_temp_base - 3 + random.uniform(-1, 1), 2)
-                    humidity = round(random.uniform(45, 92) - (temp - 25), 2)
-                    humidity = max(20, min(99, humidity))
-                    # PM2.5 偶发污染高峰
-                    pm25 = round(random.uniform(100, 250), 2) if random.random() < 0.05 \
-                        else round(random.uniform(8, 75), 2)
-                    pm10 = round(pm25 + random.uniform(5, 40), 2)
-                    noise = round(random.uniform(35, 55) if h < 7 or h > 22
-                                  else random.uniform(50, 72), 2)
-                    # 光照：白天正弦，夜间近 0
-                    if 6 <= h <= 18:
-                        illum = round(max(0, 80000 * math.sin(math.pi * (h - 6) / 12))
-                                      + random.uniform(-2000, 2000), 2)
-                    else:
-                        illum = round(random.uniform(0, 500), 2)
-                    wind = round(random.uniform(0, 8), 2)
-                    wdir = random.choice(WIND_DIRS)
-                    rows.append((dev["pole_id"], temp, humidity, pm25, pm10, noise,
-                                 illum, wind, wdir, t, self.now, self.now, 1, 1, 0))
-        sql = ("INSERT INTO env_sensor_data (pole_id, temperature, humidity, pm25, pm10, noise, "
-               "illumination, wind_speed, wind_direction, record_time, create_time, update_time, "
-               "create_by, update_by, deleted) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)")
-        self.cur.executemany(sql, rows)
-        self.conn.commit()
-        self.counts["env_sensor_data"] = len(rows)
-
     # ---------- LED 节目 ----------
     def gen_led(self, n=15):
         leds = [d for d in self._devices if d["type"] == "LED_SCREEN"]
@@ -518,7 +475,6 @@ class DataGenerator:
         self.gen_energy()
         self.gen_alarms()
         self.gen_cameras()
-        self.gen_env()
         self.gen_led()
         self.gen_workorders()
         self.conn.commit()

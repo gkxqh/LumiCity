@@ -17,7 +17,6 @@ const routes = [
       { path: 'energy', name: 'Energy', meta: { title: '能耗管理', icon: 'Lightning', perms: ['energy:record:list'] }, component: () => import('@/views/energy/index.vue') },
       { path: 'alarm', name: 'Alarm', meta: { title: '故障告警', icon: 'Warning', perms: ['alarm:record:list'] }, component: () => import('@/views/alarm/index.vue') },
       { path: 'video', name: 'Video', meta: { title: '视频监控', icon: 'VideoCamera', perms: ['video:camera:list'] }, component: () => import('@/views/video/index.vue') },
-      { path: 'environment', name: 'Environment', meta: { title: '环境监测', icon: 'Cloudy', perms: ['env:data:list'] }, component: () => import('@/views/environment/index.vue') },
       { path: 'publish', name: 'Publish', meta: { title: '信息发布', icon: 'Film', perms: ['publish:program:list'] }, component: () => import('@/views/publish/index.vue') },
       {
         path: 'workorder',
