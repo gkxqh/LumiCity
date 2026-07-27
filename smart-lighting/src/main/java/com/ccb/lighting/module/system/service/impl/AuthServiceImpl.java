@@ -12,10 +12,8 @@ import com.ccb.lighting.module.system.service.AuthService;
 import com.ccb.lighting.module.system.vo.LoginVO;
 import com.ccb.lighting.security.JwtUtil;
 import lombok.RequiredArgsConstructor;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.stereotype.Service;
-import org.springframework.util.DigestUtils;
-
-import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -56,9 +54,9 @@ public class AuthServiceImpl implements AuthService {
             throw new BusinessException(ResultCode.USER_ACCOUNT_DISABLED);
         }
 
-        // 4. 校验密码：把前端明文密码 MD5 后与库里的密文 equals 对比（学习蓝本简化）
-        String inputPwdMd5 = DigestUtils.md5DigestAsHex(dto.getPassword().getBytes(StandardCharsets.UTF_8));
-        if (!inputPwdMd5.equals(user.getPassword())) {
+        // 4. 校验密码：用 BCrypt matches 比对明文与库中哈希
+        BCryptPasswordEncoder encoder = new BCryptPasswordEncoder();
+        if(!encoder.matches(dto.getPassword(), user.getPassword())){
             throw new BusinessException(ResultCode.USER_PASSWORD_ERROR);
         }
 
@@ -101,7 +99,8 @@ public class AuthServiceImpl implements AuthService {
         //3.对数据库写入用户对象并保存
         SysUser user = new SysUser();
         user.setUsername(registerDTO.getUsername());
-        user.setPassword(DigestUtils.md5DigestAsHex(registerDTO.getPassword().getBytes()));
+        BCryptPasswordEncoder encoder = new BCryptPasswordEncoder();
+        user.setPassword(encoder.encode(registerDTO.getPassword()));
         user.setNickname(registerDTO.getNickname());
         user.setPhone(registerDTO.getPhone());
         user.setEmail(registerDTO.getEmail());

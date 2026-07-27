@@ -4,8 +4,26 @@ import request from './request'
 export function getOverview() {
   return request({ url: '/dashboard/overview', method: 'get' })
 }
-export function getAlarmTrend() {
-  return request({ url: '/dashboard/alarm/trend', method: 'get' })
+export function getAlarmTrend(days) {
+  return request({ url: '/dashboard/alarm/trend', method: 'get', params: { days } })
+}
+export function getEnergyTrend(days) {
+  return request({ url: '/dashboard/energy/trend', method: 'get', params: { days } })
+}
+export function getDeviceTypeDist() {
+  return request({ url: '/dashboard/device/type-dist', method: 'get' })
+}
+export function getAlarmCategory() {
+  return request({ url: '/dashboard/alarm/category', method: 'get' })
+}
+export function getLatestAlarm(limit) {
+  return request({ url: '/dashboard/latest-alarm', method: 'get', params: { limit } })
+}
+export function getWorkOrderStats() {
+  return request({ url: '/dashboard/workorder/stats', method: 'get' })
+}
+export function getLatestEnv() {
+  return request({ url: '/dashboard/latest-env', method: 'get' })
 }
 
 // ========== 告警管理 ==========
@@ -31,6 +49,9 @@ export function energyTrend(params) {
 }
 export function energyStatistics(params) {
   return request({ url: '/energy/statistics', method: 'get', params })
+}
+export function exportEnergyReport(params) {
+  return request({ url: '/energy/export', method: 'get', params, responseType: 'blob' })
 }
 
 // ========== 照明控制 ==========
@@ -94,6 +115,21 @@ export function deleteProgram(id) {
 export function publishProgram(id) {
   return request({ url: `/publish/program/${id}/publish`, method: 'put' })
 }
+export function programLogs(id, params) {
+  return request({ url: `/publish/program/${id}/logs`, method: 'get', params })
+}
+
+// ========== 通用文件上传 ==========
+export function uploadFile(file) {
+  const formData = new FormData()
+  formData.append('file', file)
+  return request({
+    url: '/common/upload',
+    method: 'post',
+    data: formData,
+    timeout: 120000 // 视频上传最多等 2 分钟
+  })
+}
 
 // ========== 工单运维 ==========
 export function pageWorkOrder(params) {
@@ -113,6 +149,9 @@ export function finishWorkOrder(id) {
 }
 
 // ========== 系统管理 ==========
+export function listUsersByRole(roleCode) {
+  return request({ url: '/system/user/list-by-role', method: 'get', params: { roleCode } })
+}
 export function pageUser(params) {
   return request({ url: '/system/user/page', method: 'get', params })
 }

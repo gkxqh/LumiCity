@@ -5,6 +5,7 @@ import com.ccb.lighting.common.PageQuery;
 import com.ccb.lighting.common.Result;
 import com.ccb.lighting.module.energy.entity.EnergyRecord;
 import com.ccb.lighting.module.energy.service.EnergyRecordService;
+import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.format.annotation.DateTimeFormat;
@@ -16,7 +17,11 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.io.IOException;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.Map;
 
@@ -93,8 +98,8 @@ public class EnergyRecordController {
     @GetMapping("/trend")
     public Result<List<EnergyRecord>> trend(
             @RequestParam String deviceId,
-            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime startTime,
-            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime endTime) {
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime startTime,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime endTime) {
         return Result.success(energyRecordService.trend(deviceId, startTime, endTime));
     }
 
@@ -107,5 +112,33 @@ public class EnergyRecordController {
     @GetMapping("/statistics")
     public Result<Map<String, Object>> statistics() {
         return Result.success(energyRecordService.statistics());
+    }
+
+    /**
+     * 导出能耗报表
+     *
+     * <p>支持按设备ID和时间范围筛选导出，默认导出全部。
+     * 前端通过 GET 请求下载 Excel 文件。</p>
+     *
+     * @param deviceId  设备ID（可选）
+     * @param startTime 开始时间（可选）
+     * @param endTime   结束时间（可选）
+     * @param response  HTTP 响应对象
+     */
+    @GetMapping("/export")
+    public void exportReport(
+            @RequestParam(required = false) String deviceId,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime startTime,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime endTime,
+            HttpServletResponse response) throws IOException {
+        
+        // 设置响应头
+        String filename = "能耗报表_" + LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss")) + ".xlsx";
+        response.setContentType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+        response.setCharacterEncoding("utf-8");
+        response.setHeader("Content-Disposition", "attachment;filename=" + URLEncoder.encode(filename, StandardCharsets.UTF_8));
+
+        // 调用 Service 导出
+        energyRecordService.exportReport(response.getOutputStream(), deviceId, startTime, endTime);
     }
 }

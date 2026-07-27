@@ -62,7 +62,7 @@ public class AlarmRecord extends BaseEntity implements Serializable {
     private String deviceName;
 
     /** 灯杆ID：关联 dev_pole.pole_id，标识告警的灯杆 */
-    private Integer poleId;
+    private Long poleId;
 
     /**
      * 告警类型：

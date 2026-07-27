@@ -11,6 +11,11 @@ import com.ccb.lighting.module.alarm.dto.AlarmQueryDTO;
 import com.ccb.lighting.module.alarm.entity.AlarmRecord;
 import com.ccb.lighting.module.alarm.mapper.AlarmRecordMapper;
 import com.ccb.lighting.module.alarm.service.AlarmRecordService;
+import com.ccb.lighting.module.system.entity.SysUser;
+import com.ccb.lighting.module.system.service.SysUserService;
+import com.ccb.lighting.module.system.service.impl.SysUserServiceImpl;
+import com.ccb.lighting.module.workorder.entity.WorkOrder;
+import com.ccb.lighting.module.workorder.service.WorkOrderService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
@@ -35,6 +40,13 @@ public class AlarmRecordServiceImpl implements AlarmRecordService {
 
     /** 告警 WebSocket 处理器，构造器注入，用于实时推送 */
     private final AlarmWebSocketHandler alarmWebSocketHandler;
+    private final SysUserService sysUserService;
+
+    /** 工单服务构造器注入
+     *
+     */
+    private final WorkOrderService workOrderService;
+
 
     /**
      * 新增告警记录
@@ -117,6 +129,9 @@ public class AlarmRecordServiceImpl implements AlarmRecordService {
         if (status == null || (status != 1 && status != 2)) {
             throw new BusinessException("status 仅支持 1 处理中 或 2 已闭环");
         }
+        //新增功能：自动创建工单
+        workOrderService.createFromAlarm(record, handleUser);
+
         // 3. 更新字段：状态、处理人、处理时间
         if(status == 1){
             //不允许处理人为空

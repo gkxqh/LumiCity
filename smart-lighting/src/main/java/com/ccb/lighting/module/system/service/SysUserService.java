@@ -2,6 +2,8 @@ package com.ccb.lighting.module.system.service;
 
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.ccb.lighting.module.system.entity.SysUser;
+import org.apache.ibatis.annotations.Param;
+import org.apache.ibatis.annotations.Select;
 
 import java.util.List;
 
@@ -41,7 +43,7 @@ public interface SysUserService {
 
     /**
      * 新增用户
-     * 内部逻辑：校验用户名是否重复 → 密码 MD5 加密 → 入库
+     * 内部逻辑：校验用户名是否重复 → 密码 BCrypt 加密 → 入库
      *
      * @param user 前端传入的用户信息（密码为明文，方法内加密）
      */
@@ -61,9 +63,8 @@ public interface SysUserService {
      * @param id 用户 ID
      */
     void delete(Long id);
-
     /**
-     * 根据用户名查询用户（登录认证时调用）
+     * 根据用户名查询用户
      *
      * @param username 用户名
      * @return 用户实体，不存在返回 null
@@ -85,4 +86,9 @@ public interface SysUserService {
      * @param roleIds 角色 ID 列表（可空，表示清空角色）
      */
     void assignRoles(Long userId, List<Long> roleIds);
+
+    /**
+     * 根据角色代码查询用户列表
+     */
+    List<SysUser> listByRoleCode(String roleCode);
 }

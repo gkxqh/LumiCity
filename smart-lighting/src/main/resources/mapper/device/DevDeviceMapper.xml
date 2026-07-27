@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.ccb.lighting.module.device.mapper.DevDeviceMapper">
+
+    <insert id="insertBatch">
+        INSERT INTO dev_device (device_code, device_name, device_type, pole_id, model, vendor, status)
+        VALUES
+        <foreach collection="list" item="item" separator=",">
+            (#{item.deviceCode}, #{item.deviceName}, #{item.deviceType}, #{item.poleId}, #{item.model}, #{item.vendor}, #{item.status})
+        </foreach>
+    </insert>
+
+</mapper>

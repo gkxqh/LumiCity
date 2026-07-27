@@ -71,17 +71,17 @@
         <el-table-column prop="createTime" label="创建时间" width="170" />
         <el-table-column label="操作" width="130" fixed="right" align="center">
           <template #default="{ row }">
-            <!-- 待处理：派单 -->
+            <!-- 待处理：派单（仅手动创建的工单；告警关联的工单跳过派单） -->
             <el-button
-              v-if="row.status === 0"
+              v-if="row.status === 0 && !row.alarmId"
               type="primary"
               link
               :icon="User"
               @click="openAssign(row)"
             >派单</el-button>
-            <!-- 处理中：处理 -->
+            <!-- 待处理（告警关联）或 处理中：处理 -->
             <el-button
-              v-else-if="row.status === 1"
+              v-else-if="row.status === 0 || row.status === 1"
               type="warning"
               link
               :icon="Edit"

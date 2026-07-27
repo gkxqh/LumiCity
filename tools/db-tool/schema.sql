@@ -34,7 +34,7 @@ DROP TABLE IF EXISTS sys_user;
 CREATE TABLE sys_user (
     id          BIGINT       NOT NULL AUTO_INCREMENT COMMENT '主键ID',
     username    VARCHAR(50)  NOT NULL COMMENT '用户名（登录账号，唯一）',
-    password    VARCHAR(100) NOT NULL COMMENT '密码（MD5 加密存储）',
+    password    VARCHAR(100) NOT NULL COMMENT '密码（BCrypt 加密存储）',
     nickname    VARCHAR(50)            COMMENT '昵称（中文名，用于展示）',
     phone       VARCHAR(20)            COMMENT '手机号',
     email       VARCHAR(100)          COMMENT '邮箱',
@@ -335,6 +335,7 @@ CREATE TABLE led_program (
     start_time  DATETIME               COMMENT '开始时间',
     end_time    DATETIME               COMMENT '结束时间',
     status      TINYINT      DEFAULT 0 COMMENT '状态：0待发布 1已发布 2已下线',
+    publish_time DATETIME              COMMENT '最近发布时间',
     create_time DATETIME               COMMENT '创建时间',
     update_time DATETIME               COMMENT '更新时间',
     create_by   BIGINT                 COMMENT '创建人',
@@ -356,6 +357,7 @@ CREATE TABLE work_order (
     order_type   VARCHAR(20)   NOT NULL COMMENT '类型：INSPECT巡检/REPAIR维修',
     title        VARCHAR(200)  NOT NULL COMMENT '标题',
     description  VARCHAR(1000)           COMMENT '描述',
+    alarm_id     BIGINT                  COMMENT '关联告警ID（告警自动生成工单时填写）',
     device_id    VARCHAR(50)            COMMENT '设备ID',
     pole_id      BIGINT                  COMMENT '灯杆ID',
     assignee_id  BIGINT                  COMMENT '指派人ID',
@@ -369,10 +371,37 @@ CREATE TABLE work_order (
     deleted      TINYINT       DEFAULT 0 COMMENT '逻辑删除：0未删 1已删',
     PRIMARY KEY (id),
     UNIQUE KEY uk_order_no (order_no),
+    KEY idx_alarm_id (alarm_id),
     KEY idx_order_type (order_type),
     KEY idx_assignee_id (assignee_id),
     KEY idx_status (status)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='工单表';
+
+-- -----------------------------------------------------------------------------
+-- led_publish_log LED节目发布记录表
+-- 记录每次发布的详细信息，用于发布历史追溯与效果验证
+-- -----------------------------------------------------------------------------
+DROP TABLE IF EXISTS led_publish_log;
+CREATE TABLE led_publish_log (
+    id              BIGINT       NOT NULL AUTO_INCREMENT COMMENT '主键ID',
+    program_id      BIGINT       NOT NULL COMMENT '节目ID',
+    program_name    VARCHAR(100) NOT NULL COMMENT '节目名称（冗余，避免join）',
+    media_type      VARCHAR(20)  NOT NULL COMMENT '媒体类型：TEXT/IMAGE/VIDEO',
+    content_preview VARCHAR(200)          COMMENT '内容预览（文本截取/文件名）',
+    operator        VARCHAR(50)           COMMENT '操作人用户名',
+    operator_id     BIGINT                COMMENT '操作人用户ID',
+    publish_time    DATETIME     NOT NULL COMMENT '发布时间',
+    push_status     VARCHAR(20)  DEFAULT 'SUCCESS' COMMENT '推送状态：SUCCESS成功 / FAIL失败',
+    push_message    VARCHAR(500)          COMMENT '推送结果描述',
+    create_time     DATETIME              COMMENT '创建时间',
+    update_time     DATETIME              COMMENT '更新时间',
+    create_by       BIGINT                COMMENT '创建人',
+    update_by       BIGINT                COMMENT '更新人',
+    deleted         TINYINT      DEFAULT 0 COMMENT '逻辑删除：0未删 1已删',
+    PRIMARY KEY (id),
+    KEY idx_program_id (program_id),
+    KEY idx_publish_time (publish_time)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='LED节目发布记录表';
 
 -- =============================================================================
 -- 4. 初始数据
@@ -380,10 +409,10 @@ CREATE TABLE work_order (
 
 -- -----------------------------------------------------------------------------
 -- 4.1 初始用户
--- admin 用户，密码 123456 的 MD5：e10adc3949ba59abbe56e057f20f883e
+-- admin 用户，密码 123456 的 BCrypt：$2a$10$0lXgtcSeFZjGAXpMubpTNetpC1dxIa9.wwt3DlW3AfyLZMZmk67U2
 -- -----------------------------------------------------------------------------
 INSERT INTO sys_user (username, password, nickname, phone, email, status, create_time, update_time)
-VALUES ('admin', 'e10adc3949ba59abbe56e057f20f883e', '系统管理员', '13800000000', 'admin@ccb.com', 1, NOW(), NOW());
+VALUES ('admin', '$2a$10$0lXgtcSeFZjGAXpMubpTNetpC1dxIa9.wwt3DlW3AfyLZMZmk67U2', '系统管理员', '13800000000', 'admin@ccb.com', 1, NOW(), NOW());
 
 -- -----------------------------------------------------------------------------
 -- 4.2 初始角色
@@ -483,8 +512,51 @@ INSERT INTO sys_menu (parent_id, menu_name, menu_type, path, component, perms, i
 VALUES (@dashboard_menu_id, '首页大盘', 'MENU', '/dashboard/index', 'dashboard/index/index', 'dashboard:index:list', 'DataBoard', 1, 1, 1, NOW(), NOW());
 
 -- -----------------------------------------------------------------------------
--- 4.5 角色-菜单关联
--- ADMIN 角色绑定所有菜单（这里简化，可手动按需调整）
+-- 4.5 按钮级权限数据
+-- 为系统管理子菜单添加 BUTTON 类型菜单项，承载增删改查按钮级权限标识
+-- 使用变量引用已插入的菜单 ID
+-- -----------------------------------------------------------------------------
+SET @sys_user_menu_id = (SELECT id FROM sys_menu WHERE menu_name = '用户管理' AND parent_id = @sys_menu_id LIMIT 1);
+SET @sys_role_menu_id = (SELECT id FROM sys_menu WHERE menu_name = '角色管理' AND parent_id = @sys_menu_id LIMIT 1);
+SET @sys_menu_mgr_id = (SELECT id FROM sys_menu WHERE menu_name = '菜单管理' AND parent_id = @sys_menu_id LIMIT 1);
+
+-- 用户管理下的按钮
+INSERT INTO sys_menu (parent_id, menu_name, menu_type, path, component, perms, icon, sort, visible, status, create_time, update_time)
+VALUES (@sys_user_menu_id, '新增用户', 'BUTTON', NULL, NULL, 'system:user:add', NULL, 1, 1, 1, NOW(), NOW());
+INSERT INTO sys_menu (parent_id, menu_name, menu_type, path, component, perms, icon, sort, visible, status, create_time, update_time)
+VALUES (@sys_user_menu_id, '编辑用户', 'BUTTON', NULL, NULL, 'system:user:edit', NULL, 2, 1, 1, NOW(), NOW());
+INSERT INTO sys_menu (parent_id, menu_name, menu_type, path, component, perms, icon, sort, visible, status, create_time, update_time)
+VALUES (@sys_user_menu_id, '删除用户', 'BUTTON', NULL, NULL, 'system:user:delete', NULL, 3, 1, 1, NOW(), NOW());
+
+-- 角色管理下的按钮
+INSERT INTO sys_menu (parent_id, menu_name, menu_type, path, component, perms, icon, sort, visible, status, create_time, update_time)
+VALUES (@sys_role_menu_id, '新增角色', 'BUTTON', NULL, NULL, 'system:role:add', NULL, 1, 1, 1, NOW(), NOW());
+INSERT INTO sys_menu (parent_id, menu_name, menu_type, path, component, perms, icon, sort, visible, status, create_time, update_time)
+VALUES (@sys_role_menu_id, '编辑角色', 'BUTTON', NULL, NULL, 'system:role:edit', NULL, 2, 1, 1, NOW(), NOW());
+INSERT INTO sys_menu (parent_id, menu_name, menu_type, path, component, perms, icon, sort, visible, status, create_time, update_time)
+VALUES (@sys_role_menu_id, '删除角色', 'BUTTON', NULL, NULL, 'system:role:delete', NULL, 3, 1, 1, NOW(), NOW());
+
+-- 菜单管理下的按钮
+INSERT INTO sys_menu (parent_id, menu_name, menu_type, path, component, perms, icon, sort, visible, status, create_time, update_time)
+VALUES (@sys_menu_mgr_id, '新增菜单', 'BUTTON', NULL, NULL, 'system:menu:add', NULL, 1, 1, 1, NOW(), NOW());
+INSERT INTO sys_menu (parent_id, menu_name, menu_type, path, component, perms, icon, sort, visible, status, create_time, update_time)
+VALUES (@sys_menu_mgr_id, '编辑菜单', 'BUTTON', NULL, NULL, 'system:menu:edit', NULL, 2, 1, 1, NOW(), NOW());
+INSERT INTO sys_menu (parent_id, menu_name, menu_type, path, component, perms, icon, sort, visible, status, create_time, update_time)
+VALUES (@sys_menu_mgr_id, '删除菜单', 'BUTTON', NULL, NULL, 'system:menu:delete', NULL, 3, 1, 1, NOW(), NOW());
+
+-- -----------------------------------------------------------------------------
+-- 4.6 角色-菜单关联
+-- ADMIN 角色绑定所有菜单（含按钮权限）
 -- -----------------------------------------------------------------------------
 INSERT INTO sys_role_menu (role_id, menu_id, create_time, update_time)
 SELECT 1, id, NOW(), NOW() FROM sys_menu WHERE deleted = 0;
+
+-- -----------------------------------------------------------------------------
+-- 4.7 OPERATOR/INSPECTOR 角色绑定业务菜单（不含系统管理相关及按钮权限）
+-- 注意：系统管理的一级目录 ID 为 1（DIRECTORY），子菜单 ID 为 2/3/4（MENU）
+-- -----------------------------------------------------------------------------
+INSERT INTO sys_role_menu (role_id, menu_id, create_time, update_time)
+SELECT 2, id, NOW(), NOW() FROM sys_menu m
+WHERE m.deleted = 0
+  AND m.id NOT IN (1, 2, 3, 4)
+  AND m.menu_type != 'BUTTON';

@@ -6,19 +6,25 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.ccb.lighting.common.BusinessException;
 import com.ccb.lighting.common.PageQuery;
 import com.ccb.lighting.common.ResultCode;
+import com.ccb.lighting.common.SecurityContext;
 import com.ccb.lighting.module.publish.dto.LedProgramQueryDTO;
 import com.ccb.lighting.module.publish.entity.LedProgram;
+import com.ccb.lighting.module.publish.entity.LedPublishLog;
 import com.ccb.lighting.module.publish.mapper.LedProgramMapper;
 import com.ccb.lighting.module.publish.service.LedProgramService;
+import com.ccb.lighting.module.publish.service.LedPublishLogService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+
+import java.time.LocalDateTime;
 
 /**
  * LED 节目 Service 实现类
  *
  * <p>关键实现：
  * - 新增：默认状态为 0 待发布
- * - 发布：状态从 0 改为 1，真实场景还要下发到屏幕设备</p>
+ * - 发布：状态改为已发布 + 写入发布时间 + 记录发布日志
+ * - 发布日志用于演示时追溯发布历史，展示"已成功推送到屏幕"</p>
  */
 @Service
 @RequiredArgsConstructor
@@ -26,6 +32,9 @@ public class LedProgramServiceImpl implements LedProgramService {
 
     /** LED 节目 Mapper，构造器注入 */
     private final LedProgramMapper ledProgramMapper;
+
+    /** 发布记录 Service，构造器注入 */
+    private final LedPublishLogService ledPublishLogService;
 
     /**
      * 分页查询节目列表
@@ -55,22 +64,8 @@ public class LedProgramServiceImpl implements LedProgramService {
 
     @Override
     public IPage<LedProgram> pageListByQuery(LedProgramQueryDTO query) {
-        LambdaQueryWrapper<LedProgram> wrapper = new LambdaQueryWrapper<>();
-        if(query.getProgramName() != null && !query.getProgramName().isEmpty()){
-            wrapper.like(LedProgram::getProgramName,query.getProgramName());
-        }
-        if(query.getMediaType()!=null){
-            wrapper.like(LedProgram::getMediaType,query.getMediaType());
-        }
-        if (query.getStatus() != null) {
-            wrapper.eq(LedProgram::getStatus, query.getStatus());
-        }
-        wrapper.orderByDesc(LedProgram::getCreateTime);
-        return ledProgramMapper.selectPage(
-                new Page<>(query.getCurrent(), query.getSize()),
-                wrapper
-        );
-
+        Page<LedProgram> page = new Page<>(query.getCurrent(), query.getSize());
+        return ledProgramMapper.pageListByQuery(page, query);
     }
 
     /**
@@ -110,8 +105,10 @@ public class LedProgramServiceImpl implements LedProgramService {
 
     /**
      * 发布节目
-     * 将状态从 0 待发布 改为 1 已发布
-     * TODO: 真实场景通过 MQTT 下发节目内容到 LED 屏，并等待屏幕 ACK
+     *
+     * <p>将节目状态改为已发布，记录发布时间，并写入发布日志。
+     * 发布日志包含操作人、时间、内容预览等信息，
+     * 供前端发布历史弹窗展示，模拟"推送成功"的效果。</p>
      */
     @Override
     public void publish(Long id) {
@@ -123,7 +120,42 @@ public class LedProgramServiceImpl implements LedProgramService {
         if (program.getStatus() != null && program.getStatus() == 1) {
             throw new BusinessException("节目已发布，无需重复操作");
         }
+
+        // 1. 更新节目状态 + 发布时间
+        LocalDateTime now = LocalDateTime.now();
         program.setStatus(1);
+        program.setPublishTime(now);
         ledProgramMapper.updateById(program);
+
+        // 2. 写入发布记录，追溯发布历史
+        LedPublishLog log = new LedPublishLog();
+        log.setProgramId(program.getId());
+        log.setProgramName(program.getProgramName());
+        log.setMediaType(program.getMediaType());
+
+        // 内容预览：文本截取前 200 字，图片/视频取文件名
+        String preview = program.getContent();
+        if (preview != null) {
+            if ("TEXT".equals(program.getMediaType())) {
+                preview = preview.length() > 200 ? preview.substring(0, 200) + "..." : preview;
+            } else {
+                // IMAGE/VIDEO 取文件名最后一段
+                int idx = preview.lastIndexOf('/');
+                if (idx >= 0) {
+                    preview = preview.substring(idx + 1);
+                }
+            }
+        }
+        log.setContentPreview(preview);
+
+        // 从 SecurityContext 取当前用户（JWT 拦截器写入）
+        log.setOperatorId(SecurityContext.getUserId());
+        // 当前线程有 SecurityInfo 但无 username 字段直接存储，取用户ID的字符串表示
+        log.setOperator(String.valueOf(SecurityContext.getUserId()));
+
+        log.setPublishTime(now);
+        log.setPushStatus("SUCCESS");
+        log.setPushMessage("节目已推送到 LED 屏幕，正在播放中");
+        ledPublishLogService.add(log);
     }
 }

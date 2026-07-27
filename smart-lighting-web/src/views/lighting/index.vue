@@ -296,9 +296,10 @@ async function loadData() {
 /* ---------------- 启用状态切换 ---------------- */
 
 // 切换启用状态：调 updateStrategy 改 enabled 字段
+// 注意后端 @Valid 校验需要传全所有必填字段，故把 row 展开传递
 async function handleToggleEnabled(row, val) {
   try {
-    await updateStrategy({ id: row.id, enabled: val })
+    await updateStrategy({ ...row, enabled: val })
     row.enabled = val
     ElMessage.success(val ? '已启用' : '已停用')
   } catch (e) {

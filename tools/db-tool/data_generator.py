@@ -8,13 +8,17 @@
   - 幂等：先清空业务表与测试用户（保留 admin 及初始角色/菜单），再重新生成
 """
 import random
-import hashlib
 import math
 from datetime import datetime, timedelta, time as dtime
 
 
-def md5(text: str) -> str:
-    return hashlib.md5(text.encode("utf-8")).hexdigest()
+# ---------- 静态数据池 ----------
+
+
+def bcrypt_hash(text: str) -> str:
+    """用 Python 的 bcrypt 生成哈希，对标 Java BCryptPasswordEncoder"""
+    import bcrypt as _bcrypt
+    return _bcrypt.hashpw(text.encode("utf-8"), _bcrypt.gensalt()).decode("utf-8")
 
 
 # ---------- 静态数据池 ----------
@@ -93,10 +97,17 @@ class DataGenerator:
     def clear(self):
         # 先删业务表（引用设备/灯杆），再删设备/灯杆
         for t in ["energy_record", "alarm_record", "env_sensor_data", "work_order",
-                  "led_program", "light_strategy", "video_camera", "dev_device", "dev_pole"]:
+                  "led_publish_log", "led_program", "light_strategy", "video_camera", "dev_device", "dev_pole"]:
             self.cur.execute(f"DELETE FROM {t}")
-        # 删除测试角色（id>2）及其绑定
+        # 清理角色菜单绑定并重置 OPERATOR 权限
         self.cur.execute("DELETE FROM sys_role_menu WHERE role_id > 2")
+        self.cur.execute("DELETE FROM sys_role_menu WHERE role_id = 2")
+        # 重新给 OPERATOR 绑定业务菜单（排除系统管理相关及按钮权限）
+        self.cur.execute(
+            "INSERT INTO sys_role_menu (role_id, menu_id, create_time, update_time, create_by, update_by, deleted) "
+            "SELECT 2, id, NOW(), NOW(), 1, 1, 0 FROM sys_menu m "
+            "WHERE m.deleted = 0 AND m.id NOT IN (1, 2, 3, 4) AND m.menu_type != 'BUTTON'"
+        )
         self.cur.execute("DELETE FROM sys_user_role WHERE user_id > 1 OR role_id > 2")
         self.cur.execute("DELETE FROM sys_user WHERE id > 1")
         self.cur.execute("DELETE FROM sys_role WHERE id > 2")
@@ -114,8 +125,12 @@ class DataGenerator:
                  "update_time", "create_by", "update_by", "deleted"],
                 ("INSPECTOR", "巡检人员", "负责日常巡检与工单执行", 1, *self._audit()),
             )
-            # 给巡检角色绑定除系统管理外的菜单
-            self.cur.execute("SELECT id FROM sys_menu WHERE deleted=0 AND parent_id<>0")
+            # 给巡检角色绑定业务菜单（排除系统管理相关及按钮权限）
+            # 系统管理目录(ID=1)及其子菜单(ID=2/3/4)均排除
+            self.cur.execute(
+                "SELECT id FROM sys_menu WHERE deleted=0 AND menu_type != 'BUTTON'"
+                " AND id NOT IN (1, 2, 3, 4)"
+            )
             for (mid,) in self.cur.fetchall():
                 self._insert("sys_role_menu", ["role_id", "menu_id", "create_time",
                                                "update_time", "create_by", "update_by", "deleted"],
@@ -140,7 +155,7 @@ class DataGenerator:
                 "sys_user",
                 ["username", "password", "nickname", "phone", "email", "status",
                  "create_time", "update_time", "create_by", "update_by", "deleted"],
-                (username, md5("123456"), name, f"13{random.randint(100000000,999999999)}",
+                (username, bcrypt_hash("123456"), name, f"13{random.randint(100000000,999999999)}",
                  f"{username}@ccb.com", status, *self._audit()),
             )
             rid = role_map.get(role_code, 2)
@@ -277,6 +292,7 @@ class DataGenerator:
     def gen_alarms(self, n=50):
         users = [u for u in self._fetch_users()]
         rows = 0
+        self._alarms = []  # [(alarm_id, device_code, pole_id, alarm_type, alarm_level), ...]
         for _ in range(n):
             dev = random.choice(self._devices)
             atype = _weighted(ALARM_TYPES, ALARM_TYPE_WEIGHTS)
@@ -299,7 +315,7 @@ class DataGenerator:
                 # 已闭环：填写处理意见 + 完成时间
                 handle_time = alarm_time + timedelta(minutes=random.randint(10, 600))
                 handle_result = random.choice(HANDLE_RESULTS)
-            self._insert(
+            alarm_id = self._insert(
                 "alarm_record",
                 ["device_id", "pole_id", "alarm_type", "alarm_level", "alarm_content",
                  "alarm_time", "status", "handle_user", "handle_time", "handle_result",
@@ -307,6 +323,9 @@ class DataGenerator:
                 (dev["code"], dev["pole_id"], atype, level, content_map[atype],
                  alarm_time, status, handle_user, handle_time, handle_result, *self._audit()),
             )
+            # 保存告警ID信息（处理中/已闭环的告警可用于关联工单）
+            if status in (1, 2):
+                self._alarms.append((alarm_id, dev["code"], dev["pole_id"], atype, level))
             rows += 1
         self.conn.commit()
         self.counts["alarm_record"] = rows
@@ -408,7 +427,50 @@ class DataGenerator:
         titles_inspect = ["例行巡检", "季度设备检查", "灯杆安全巡检", "线路排查"]
         titles_repair = ["灯具更换", "摄像头维修", "传感器校准", "电源故障修复", "LED屏维修"]
         seq = 1
-        for _ in range(n):
+
+        # 先创建当前最新序列号：查已有最大工单编号的后缀
+        self.cur.execute("SELECT order_no FROM work_order ORDER BY id DESC LIMIT 1")
+        row = self.cur.fetchone()
+        if row:
+            last_seq = int(row[0].split("-")[-1])
+            seq = last_seq + 1
+
+        # --- A) 告警关联工单：从已分配处理人的告警中生成约 40% 的工单 ---
+        alarm_related = 0
+        target_alarm_count = max(0, min(n // 2, len(self._alarms))) if hasattr(self, '_alarms') and self._alarms else 0
+        if target_alarm_count > 0:
+            selected_alarms = random.sample(
+                self._alarms,
+                min(target_alarm_count, len(self._alarms))
+            )
+            for (alarm_id, dev_code, pole_id, alarm_type, alarm_level) in selected_alarms:
+                create_t = self.now - timedelta(days=random.randint(0, 15),
+                                                hours=random.randint(0, 23))
+                order_no = f"WO-{create_t.strftime('%Y%m%d')}-{seq:03d}"
+                seq += 1
+
+                type_text = {"OFFLINE": "离线", "OVERVOLTAGE": "过压",
+                             "OVERCURRENT": "过流", "ABNORMAL": "异常"}.get(alarm_type, alarm_type)
+                title = f"维修工单：{dev_code} - {type_text}告警"
+                assignee = random.choice(users)
+                finish = create_t + timedelta(hours=random.randint(2, 48))
+                status = _weighted([1, 2], [40, 60])  # 处理中 / 已完成
+                self._insert(
+                    "work_order",
+                    ["order_no", "order_type", "title", "description", "device_id", "pole_id",
+                     "assignee_id", "priority", "status", "finish_time", "alarm_id",
+                     "create_time", "update_time", "create_by", "update_by", "deleted"],
+                    (order_no, "REPAIR", title,
+                     f"告警自动生成：{dev_code} 触发 {type_text}告警",
+                     dev_code, pole_id, assignee[0],
+                     alarm_level, status,
+                     finish if status >= 2 else None, alarm_id,
+                     create_t, self.now, 1, 1, 0),
+                )
+                alarm_related += 1
+
+        # --- B) 独立工单（手动创建的巡检/维修，无 alarm_id）---
+        for _ in range(n - alarm_related):
             dev = random.choice(self._devices)
             otype = _weighted(ORDER_TYPES, [40, 60])
             status = _weighted(ORDER_STATUS, ORDER_STATUS_WEIGHTS)
@@ -424,11 +486,14 @@ class DataGenerator:
             self._insert(
                 "work_order",
                 ["order_no", "order_type", "title", "description", "device_id", "pole_id",
-                 "assignee_id", "priority", "status", "finish_time", "create_time",
-                 "update_time", "create_by", "update_by", "deleted"],
-                (order_no, otype, f"{dev['code']}-{title}", f"针对设备 {dev['code']} 的{title}任务",
-                 dev["code"], dev["pole_id"], assignee, random.choice([1, 2, 2, 3]),
-                 status, finish, create_t, self.now, 1, 1, 0),
+                 "assignee_id", "priority", "status", "finish_time", "alarm_id",
+                 "create_time", "update_time", "create_by", "update_by", "deleted"],
+                (order_no, otype, f"{dev['code']}-{title}",
+                 f"针对设备 {dev['code']} 的{title}任务",
+                 dev["code"], dev["pole_id"], assignee,
+                 random.choice([1, 2, 2, 3]),
+                 status, finish, None,   # alarm_id = None
+                 create_t, self.now, 1, 1, 0),
             )
         self.conn.commit()
         self.counts["work_order"] = n
