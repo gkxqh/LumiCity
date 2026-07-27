@@ -87,6 +87,10 @@ export function updateCamera(data) {
 export function deleteCamera(id) {
   return request({ url: `/video/camera/${id}`, method: 'delete' })
 }
+// 获取摄像头抓拍图（RTSP 等无法直连时的后端兜底，返回 blob）
+export function getSnapshot(id) {
+  return request({ url: `/video/camera/${id}/snapshot`, method: 'get', responseType: 'blob' })
+}
 
 // ========== 环境监测 ==========
 export function pageEnv(params) {

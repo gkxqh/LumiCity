@@ -23,6 +23,14 @@ public interface VideoCameraService {
      */
     VideoCamera getById(Long id);
 
+    /**
+     * 获取摄像头抓拍图（后端实时绘制，用于 RTSP 等浏览器无法直连时的演示兜底）
+     *
+     * @param id 摄像头 ID
+     * @return JPEG 图片字节
+     */
+    byte[] getSnapshot(Long id);
+
     IPage<VideoCamera> pageListByQuery(VideoCameraQueryDTO query);
 
     /**
