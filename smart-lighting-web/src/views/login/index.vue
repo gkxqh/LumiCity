@@ -145,7 +145,7 @@ const lightSourceStyle = computed(() => {
 const cardEdgeStyle = computed(() => ({
   '--edge-x': `${lightX.value}%`,
   '--edge-y': `${lightY.value}%`,
-  '--edge-opacity': isHovering.value ? '0.65' : '0.12'
+  '--edge-opacity': isHovering.value ? '0.85' : '0.12'
 }))
 
 function centerLight() {
@@ -285,8 +285,8 @@ async function handleLogin() {
   /*
     用径向渐变模拟边缘扫光：
     - 中心定位跟随鼠标 (via CSS 自定义属性)
+    - mask 抠掉中心区域，仅边缘可见
     - 边缘处呈现白色高光渐变
-    - 远处逐渐淡出
   */
   width: 200%;
   height: 200%;
@@ -294,12 +294,16 @@ async function handleLogin() {
   top: calc(var(--edge-y, 10%) - 100%);
   background: radial-gradient(
     circle at center,
-    rgba(255, 255, 255, 0.18) 0%,
-    rgba(255, 255, 255, 0.04) 30%,
-    transparent 60%
+    rgba(255, 255, 255, 0.35) 0%,
+    rgba(255, 255, 255, 0.12) 25%,
+    rgba(255, 255, 255, 0.04) 50%,
+    transparent 70%
   );
+  /* 宽环形遮罩 — 只露出边缘一圈，抠掉中心区域 */
+  mask: radial-gradient(circle at 50% 50%, transparent 52%, black 66%);
+  -webkit-mask: radial-gradient(circle at 50% 50%, transparent 52%, black 66%);
   pointer-events: none;
-  opacity: var(--edge-opacity, 0.15);
+  opacity: var(--edge-opacity, 0.12);
   transition: opacity 0.6s cubic-bezier(0.25, 0.1, 0.25, 1);
   z-index: -1;
 }
@@ -399,7 +403,7 @@ async function handleLogin() {
 }
 
 /* =========================================================
-   6. 登录按钮 — 渐变液态玻璃质感
+   6. 登录按钮 — 同款液态玻璃质感（与输入框一致）
    ========================================================= */
 .login-card .glass-btn {
   height: 48px;
@@ -407,30 +411,30 @@ async function handleLogin() {
   font-weight: 500;
   letter-spacing: 4px;
   border-radius: 14px;
-  border: 0.5px solid rgba(255, 255, 255, 0.2);
-  background: linear-gradient(135deg, rgba(60, 80, 160, 0.55), rgba(100, 60, 180, 0.45));
+  border: 0.5px solid rgba(255, 255, 255, 0.15);
+  background: rgba(255, 255, 255, 0.08);
   backdrop-filter: blur(12px) saturate(1.3);
   -webkit-backdrop-filter: blur(12px) saturate(1.3);
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.15),
+    inset 0 1px 0 rgba(255, 255, 255, 0.12),
     0 4px 16px rgba(0, 0, 0, 0.2);
   color: rgba(255, 255, 255, 0.92);
   transition: all 0.2s cubic-bezier(0.25, 0.1, 0.25, 1);
 }
 
-/* hover — 亮一点 */
+/* hover — 略微提亮 */
 .login-card .glass-btn:hover {
-  background: linear-gradient(135deg, rgba(70, 90, 175, 0.65), rgba(115, 70, 195, 0.55));
-  border-color: rgba(255, 255, 255, 0.3);
+  background: rgba(255, 255, 255, 0.12);
+  border-color: rgba(255, 255, 255, 0.25);
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.2),
+    inset 0 1px 0 rgba(255, 255, 255, 0.18),
     0 6px 24px rgba(0, 0, 0, 0.25);
 }
 
 /* active/点击 — 压缩反馈 */
 .login-card .glass-btn:active {
   transform: scale(0.97);
-  background: linear-gradient(135deg, rgba(55, 70, 145, 0.7), rgba(90, 55, 165, 0.6));
+  background: rgba(255, 255, 255, 0.10);
 }
 
 /* loading 态 */
@@ -482,7 +486,7 @@ async function handleLogin() {
       0 8px 40px rgba(0, 0, 0, 0.35);
   }
   .login-card .glass-btn {
-    background: linear-gradient(135deg, rgba(40, 55, 120, 0.6), rgba(80, 40, 150, 0.5));
+    background: rgba(255, 255, 255, 0.05);
   }
 }
 </style>
