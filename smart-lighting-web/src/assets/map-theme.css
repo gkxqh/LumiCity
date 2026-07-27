@@ -1,0 +1,147 @@
+/* =========================================================
+   Leaflet 暗色主题样式覆盖（与大盘深色风格匹配）
+   ========================================================= */
+
+/* ------ 地图容器 ------ */
+.leaflet-container {
+  background: #0a1628;
+  font-family: inherit;
+}
+
+/* ------ 缩放控件 ------ */
+.leaflet-control-zoom {
+  border: none !important;
+}
+.leaflet-control-zoom a {
+  background: rgba(15, 23, 42, 0.85) !important;
+  color: #c8d6e5 !important;
+  border: 1px solid rgba(64, 158, 255, 0.2) !important;
+  transition: background 0.2s;
+}
+.leaflet-control-zoom a:hover {
+  background: rgba(26, 34, 56, 0.95) !important;
+}
+.leaflet-control-zoom a.leaflet-disabled {
+  color: rgba(200, 214, 229, 0.25) !important;
+}
+
+/* ------ 属性控件（右下角 OSM 版权） ------ */
+.leaflet-control-attribution {
+  background: rgba(10, 22, 40, 0.7) !important;
+  color: rgba(200, 214, 229, 0.3) !important;
+  font-size: 10px !important;
+  padding: 2px 6px !important;
+  backdrop-filter: blur(4px);
+}
+.leaflet-control-attribution a {
+  color: rgba(200, 214, 229, 0.4) !important;
+}
+.leaflet-control-attribution a:hover {
+  color: #409eff !important;
+}
+
+/* ------ 灯杆 Marker 容器 ------ */
+.pole-marker-wrapper {
+  background: none !important;
+  border: none !important;
+}
+
+/* ------ 灯杆 Marker 圆点 ------ */
+.pole-marker {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  cursor: pointer;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+.pole-marker:hover {
+  transform: scale(1.6);
+  z-index: 1000 !important;
+}
+
+/* 状态色 & 发光 */
+.pole-marker.online {
+  background: #67c23a;
+  box-shadow: 0 0 8px rgba(103, 194, 58, 0.6);
+}
+.pole-marker.offline {
+  background: #909399;
+  box-shadow: 0 0 4px rgba(144, 147, 153, 0.4);
+}
+.pole-marker.fault {
+  background: #f56c6c;
+  box-shadow: 0 0 12px rgba(245, 108, 108, 0.8);
+  animation: markerBlink 1.2s ease-in-out infinite;
+}
+
+@keyframes markerBlink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
+
+/* ------ 暗色弹窗 ------ */
+.pole-popup-dark .leaflet-popup-content-wrapper {
+  background: rgba(15, 23, 42, 0.95);
+  color: #c8d6e5;
+  border: 1px solid rgba(64, 158, 255, 0.2);
+  border-radius: 8px;
+  padding: 2px 6px;
+  backdrop-filter: blur(8px);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+}
+.pole-popup-dark .leaflet-popup-content {
+  margin: 10px 14px;
+  font-size: 13px;
+  line-height: 1.6;
+  min-width: 180px;
+}
+.pole-popup-dark .leaflet-popup-content h4 {
+  margin: 0 0 6px;
+  color: #e8edf5;
+  font-size: 15px;
+  font-weight: 600;
+}
+.pole-popup-dark .leaflet-popup-content .popup-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 2px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+}
+.pole-popup-dark .leaflet-popup-content .popup-row:last-child {
+  border-bottom: none;
+}
+.pole-popup-dark .leaflet-popup-content .popup-label {
+  color: rgba(200, 214, 229, 0.5);
+}
+.pole-popup-dark .leaflet-popup-content .popup-value {
+  color: #e8edf5;
+  font-weight: 500;
+}
+.pole-popup-dark .leaflet-popup-tip {
+  background: rgba(15, 23, 42, 0.95);
+  border-color: rgba(64, 158, 255, 0.2);
+}
+.pole-popup-dark .leaflet-popup-close-button {
+  color: rgba(200, 214, 229, 0.5) !important;
+  font-size: 16px !important;
+  top: 6px !important;
+  right: 6px !important;
+}
+.pole-popup-dark .leaflet-popup-close-button:hover {
+  color: #e8edf5 !important;
+}
+
+/* ------ Three.js 叠加层容器 ------ */
+.three-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 1000;
+}
+.three-overlay canvas {
+  display: block;
+}
