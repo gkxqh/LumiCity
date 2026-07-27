@@ -13,9 +13,7 @@
       :style="lightSourceStyle"
     ></div>
 
-    <div class="login-card">
-      <!-- 顶部高光装饰线 -->
-      <div class="glass-edge"></div>
+    <div class="login-card" ref="cardRef" :style="cardEdgeStyle">
 
       <!-- 标题 -->
       <div class="login-title">智慧城市照明综合控制系统</div>
@@ -123,28 +121,34 @@ onBeforeUnmount(() => {
   }
 })
 
+const cardRef = ref(null)
+
 /* ---- 动态追光 ---- */
-const lightX = ref(50)   // 百分比，默认居中
+const lightX = ref(50)
 const lightY = ref(50)
 const isHovering = ref(false)
 const rafId = ref(null)
 
-// 光源位置映射 —— 卡片中心的径向渐变，以百分比计算使光源跨整个背景层面板移动
-// 鼠标在整个视口中的位置 → 光源偏移；同时添加 0.12 的柔和最大不透明度
+// 背景层环境光晕 — 鼠标位置决定光晕中心
 const lightSourceStyle = computed(() => {
   if (!isHovering.value) {
-    // 不hover时在右上角保留微弱环境光
-    return { opacity: '0.3' }
+    return { opacity: '0.15' }
   }
   return {
     left: `${lightX.value}%`,
     top: `${lightY.value}%`,
-    opacity: '1'
+    opacity: '0.5'
   }
 })
 
+// 卡片边缘光照 — 鼠标方向决定边缘亮起位置
+const cardEdgeStyle = computed(() => ({
+  '--edge-x': `${lightX.value}%`,
+  '--edge-y': `${lightY.value}%`,
+  '--edge-opacity': isHovering.value ? '0.85' : '0.12'
+}))
+
 function centerLight() {
-  // 初次加载，光源置于右上区域（原静态设计的位置）
   lightX.value = 85
   lightY.value = 15
 }
@@ -155,12 +159,11 @@ function onMouseEnter() {
 
 function onMouseLeave() {
   isHovering.value = false
-  // 鼠标离开时回到右上角
   centerLight()
 }
 
 function onMouseMove(e) {
-  if (rafId.value !== null) return // 由 rAF 节流
+  if (rafId.value !== null) return
 
   rafId.value = requestAnimationFrame(() => {
     rafId.value = null
@@ -170,7 +173,6 @@ function onMouseMove(e) {
     const w = window.innerWidth
     const h = window.innerHeight
 
-    // 将鼠标坐标映射到百分比 (0~100)，略向中心收缩使光晕不贴边
     lightX.value = (x / w) * 100
     lightY.value = (y / h) * 100
   })
@@ -205,7 +207,9 @@ async function handleLogin() {
    ========================================================= */
 .login-container {
   position: relative;
+  width: 100%;
   height: 100vh;
+  overflow: hidden;            /* 防止 600px 光晕超出产生滚动条/抽搐 */
   display: flex;
   align-items: center;
   justify-content: center;
@@ -224,32 +228,22 @@ async function handleLogin() {
   pointer-events: none;
 }
 
-/* 背景装饰光晕 — 模拟环境光（已废弃，改为动态 .light-source 元素）
-.login-container::after {
-  ...
-}
-*/
-
-/* 动态追光 — 跟随鼠标的环境光晕（替换原 ::after） */
+/* 动态追光 — 跟随鼠标的环境光晕 */
 .light-source {
   position: absolute;
   width: 600px;
   height: 600px;
-  /*
-    以光源中心 (left/top) 为圆心，向四周扩散的柔和径向渐变
-    - 中心高亮偏紫蓝色
-    - 向外快速淡出到完全透明
-  */
   background: radial-gradient(
     circle at center,
-    rgba(130, 180, 255, 0.18) 0%,
-    rgba(100, 80, 220, 0.10) 30%,
-    rgba(80, 40, 200, 0.05) 50%,
+    rgba(180, 200, 255, 0.10) 0%,
+    rgba(140, 170, 240, 0.06) 30%,
+    rgba(100, 140, 220, 0.03) 50%,
     transparent 70%
   );
   border-radius: 50%;
   transform: translate(-50%, -50%);
   pointer-events: none;
+  will-change: left, top, opacity;
   transition: opacity 0.6s cubic-bezier(0.25, 0.1, 0.25, 1);
   z-index: 0;
 }
@@ -278,26 +272,40 @@ async function handleLogin() {
     inset 0 1px 0 rgba(255, 255, 255, 0.15),
     0 8px 40px rgba(0, 0, 0, 0.25),
     0 2px 8px rgba(0, 0, 0, 0.1);
-  border: 0.5px solid rgba(255, 255, 255, 0.12);
+  border: 0.5px solid rgba(255, 255, 255, 0.08);
   z-index: 1;
+  /* 溢出隐藏 — 使 ::after 的光晕不超出圆角边框 */
+  overflow: hidden;
 }
 
-/* 顶部细高光线 — 模拟玻璃边缘反光 */
-.login-card .glass-edge {
+/* 卡片边缘动态光照 — 替代固定 .glass-edge，跟随鼠标方向 */
+.login-card::after {
+  content: '';
   position: absolute;
-  top: 0;
-  left: 10%;
-  right: 10%;
-  height: 1px;
-  background: linear-gradient(
-    90deg,
-    transparent 0%,
-    rgba(255, 255, 255, 0.4) 30%,
-    rgba(255, 255, 255, 0.5) 50%,
-    rgba(255, 255, 255, 0.4) 70%,
-    transparent 100%
+  /*
+    用径向渐变模拟边缘扫光：
+    - 中心定位跟随鼠标 (via CSS 自定义属性)
+    - mask 抠掉中心区域，仅边缘可见
+    - 边缘处呈现白色高光渐变
+  */
+  width: 200%;
+  height: 200%;
+  left: calc(var(--edge-x, 50%) - 100%);
+  top: calc(var(--edge-y, 10%) - 100%);
+  background: radial-gradient(
+    circle at center,
+    rgba(255, 255, 255, 0.35) 0%,
+    rgba(255, 255, 255, 0.12) 25%,
+    rgba(255, 255, 255, 0.04) 50%,
+    transparent 70%
   );
-  border-radius: 1px;
+  /* 宽环形遮罩 — 只露出边缘一圈，抠掉中心区域 */
+  mask: radial-gradient(circle at 50% 50%, transparent 52%, black 66%);
+  -webkit-mask: radial-gradient(circle at 50% 50%, transparent 52%, black 66%);
+  pointer-events: none;
+  opacity: var(--edge-opacity, 0.12);
+  transition: opacity 0.6s cubic-bezier(0.25, 0.1, 0.25, 1);
+  z-index: -1;
 }
 
 /* =========================================================
@@ -395,7 +403,7 @@ async function handleLogin() {
 }
 
 /* =========================================================
-   6. 登录按钮 — 渐变液态玻璃质感
+   6. 登录按钮 — 同款液态玻璃质感（与输入框一致）
    ========================================================= */
 .login-card .glass-btn {
   height: 48px;
@@ -403,30 +411,30 @@ async function handleLogin() {
   font-weight: 500;
   letter-spacing: 4px;
   border-radius: 14px;
-  border: 0.5px solid rgba(255, 255, 255, 0.2);
-  background: linear-gradient(135deg, rgba(60, 80, 160, 0.55), rgba(100, 60, 180, 0.45));
+  border: 0.5px solid rgba(255, 255, 255, 0.15);
+  background: rgba(255, 255, 255, 0.08);
   backdrop-filter: blur(12px) saturate(1.3);
   -webkit-backdrop-filter: blur(12px) saturate(1.3);
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.15),
+    inset 0 1px 0 rgba(255, 255, 255, 0.12),
     0 4px 16px rgba(0, 0, 0, 0.2);
   color: rgba(255, 255, 255, 0.92);
   transition: all 0.2s cubic-bezier(0.25, 0.1, 0.25, 1);
 }
 
-/* hover — 亮一点 */
+/* hover — 略微提亮 */
 .login-card .glass-btn:hover {
-  background: linear-gradient(135deg, rgba(70, 90, 175, 0.65), rgba(115, 70, 195, 0.55));
-  border-color: rgba(255, 255, 255, 0.3);
+  background: rgba(255, 255, 255, 0.12);
+  border-color: rgba(255, 255, 255, 0.25);
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.2),
+    inset 0 1px 0 rgba(255, 255, 255, 0.18),
     0 6px 24px rgba(0, 0, 0, 0.25);
 }
 
 /* active/点击 — 压缩反馈 */
 .login-card .glass-btn:active {
   transform: scale(0.97);
-  background: linear-gradient(135deg, rgba(55, 70, 145, 0.7), rgba(90, 55, 165, 0.6));
+  background: rgba(255, 255, 255, 0.10);
 }
 
 /* loading 态 */
@@ -478,7 +486,7 @@ async function handleLogin() {
       0 8px 40px rgba(0, 0, 0, 0.35);
   }
   .login-card .glass-btn {
-    background: linear-gradient(135deg, rgba(40, 55, 120, 0.6), rgba(80, 40, 150, 0.5));
+    background: rgba(255, 255, 255, 0.05);
   }
 }
 </style>
