@@ -233,18 +233,7 @@ public class WorkOrderServiceImpl implements WorkOrderService {
     @Override
     public IPage<WorkOrder> pageListByQuery(WorkOrderQueryDTO query) {
         LambdaQueryWrapper<WorkOrder> wrapper = new LambdaQueryWrapper<>();
-        if(query.getOrderType()!=null && !query.getOrderType().isEmpty()){
-            wrapper.eq(WorkOrder::getOrderType,query.getOrderType());
-        }
-        if(query.getStatus() != null){
-            wrapper.eq(WorkOrder::getStatus,query.getStatus());
-        }
-        if(query.getDeviceId()!=null && !query.getDeviceId().isEmpty()){
-            wrapper.eq(WorkOrder::getDeviceId,query.getDeviceId());
-        }
-
         wrapper.orderByDesc(WorkOrder::getCreateTime);
-
         return workOrderMapper.selectWorkOrderPage(new Page<>(query.getCurrent(), query.getSize()), query);
 
     }

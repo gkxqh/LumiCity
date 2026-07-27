@@ -58,9 +58,9 @@ public class VideoCameraServiceImpl implements VideoCameraService {
             wrapper.like(VideoCamera::getCameraName,query.getCameraName());
         }
         wrapper.orderByDesc(VideoCamera::getCreateTime);
-        return videoCameraMapper.selectPage(
+        return videoCameraMapper.selectVideoCameraPage(
                 new Page<>(query.getCurrent(), query.getSize()),
-                wrapper
+                query
         );
 
     }

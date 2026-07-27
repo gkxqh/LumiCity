@@ -1,5 +1,6 @@
 package com.ccb.lighting.module.video.entity;
 
+import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableName;
 import com.ccb.lighting.common.BaseEntity;
 import jakarta.validation.constraints.NotBlank;
@@ -51,4 +52,8 @@ public class VideoCamera extends BaseEntity implements Serializable {
 
     /** 分辨率：如 720P、1080P、4K。影响清晰度与带宽占用 */
     private String resolution;
+
+    /**所属灯杆，用于前端展示摄像头挂载位置（冗余字段，非数据库字段）*/
+    @TableField(exist = false)
+    private String poleName;
 }

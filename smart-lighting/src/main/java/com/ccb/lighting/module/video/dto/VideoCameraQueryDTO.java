@@ -9,4 +9,5 @@ import lombok.EqualsAndHashCode;
 public class VideoCameraQueryDTO extends PageQuery {
     private String cameraName;
     private Integer status;
+    private String poleName;
 }
