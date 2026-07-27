@@ -53,6 +53,34 @@ public class JwtUtil {
         return builder.compact();
     }
 
+    /**
+     * 生成 token（自定义过期时间）
+     *
+     * @param userId   用户 ID
+     * @param username 用户名
+     * @param roles    角色列表
+     * @param perms    权限列表
+     * @param expireSeconds 自定义过期秒数（用于"记住我"）
+     */
+    public String createToken(Long userId, String username, List<String> roles, List<String> perms, long expireSeconds) {
+        Date now = new Date();
+        Date expire = new Date(now.getTime() + expireSeconds * 1000);
+        var builder = Jwts.builder()
+                .subject(String.valueOf(userId))
+                .claim("username", username)
+                .issuedAt(now)
+                .expiration(expire)
+                .signWith(getKey());
+        if (roles != null) {
+            builder.claim("roles", roles);
+        }
+        if (perms != null) {
+            builder.claim("perms", perms);
+        }
+        return builder.compact();
+    }
+
+
     /** 解析 token，返回 Claims（里面含 userId、username 等） */
     public Claims parseToken(String token) {
         return Jwts.parser()

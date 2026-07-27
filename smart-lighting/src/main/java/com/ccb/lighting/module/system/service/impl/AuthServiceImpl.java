@@ -10,6 +10,7 @@ import com.ccb.lighting.module.system.entity.SysUser;
 import com.ccb.lighting.module.system.mapper.SysUserMapper;
 import com.ccb.lighting.module.system.service.AuthService;
 import com.ccb.lighting.module.system.vo.LoginVO;
+import com.ccb.lighting.security.JwtProperties;
 import com.ccb.lighting.security.JwtUtil;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
@@ -32,6 +33,7 @@ public class AuthServiceImpl implements AuthService {
 
     /** JWT 工具：登录成功后生成 token */
     private final JwtUtil jwtUtil;
+    private final JwtProperties jwtProperties;
 
     /**
      * 登录认证核心逻辑
@@ -70,7 +72,13 @@ public class AuthServiceImpl implements AuthService {
         List<String> perms = sysUserMapper.selectUserPerms(user.getId());
 
         // 7. 生成 JWT token：把 userId、username、roles、perms 一起写入，供接口级鉴权
-        String token = jwtUtil.createToken(user.getId(), user.getUsername(), roles, perms);
+        long expireSeconds;
+        if (dto.getRememberMe() != null && dto.getRememberMe()) {
+            expireSeconds = 7 * 24 * 3600;  // 7天
+        } else {
+            expireSeconds = jwtProperties.getExpire();  // 用配置文件默认值（2小时）
+        }
+        String token = jwtUtil.createToken(user.getId(), user.getUsername(), roles, perms, expireSeconds);
 
         // 8. 组装 LoginVO 返回（不返回密码等敏感字段）
         LoginVO vo = new LoginVO();
@@ -79,6 +87,7 @@ public class AuthServiceImpl implements AuthService {
         vo.setNickname(user.getNickname());
         vo.setRoles(roles);
         vo.setPerms(perms);
+        vo.setExpireSeconds(expireSeconds);
         return vo;
     }
 

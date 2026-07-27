@@ -11,14 +11,14 @@ export const useUserStore = defineStore('user', () => {
   const roles = ref([])
   const perms = ref([])
 
-  async function login(loginForm) {
+  async function login(loginForm, rememberMe = false) {
     const res = await loginApi(loginForm)
     token.value = res.data.token
     username.value = res.data.username
     nickname.value = res.data.nickname
     roles.value = res.data.roles || []
     perms.value = res.data.perms || []
-    setToken(res.data.token)
+    setToken(res.data.token, rememberMe)
     return res
   }
 

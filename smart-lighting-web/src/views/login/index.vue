@@ -1,7 +1,8 @@
 <!--
   登录页
   - 居中卡片样式，渐变背景
-  - ElForm 表单 + rules 校验
+  - 新增"记住我"复选框：勾选后 token 存 cookie（7天），否则存 sessionStorage
+  - 页面加载时自动检测 cookie token → 有则跳转首页
   - 调用 useUserStore().login() 完成登录，成功后跳转 /dashboard
 -->
 <template>
@@ -42,6 +43,11 @@
           />
         </el-form-item>
 
+        <!-- 记住我 复选框 -->
+        <el-form-item>
+          <el-checkbox v-model="rememberMe">记住我</el-checkbox>
+        </el-form-item>
+
         <!-- 登录按钮 -->
         <el-form-item>
           <el-button
@@ -64,11 +70,12 @@
 </template>
 
 <script setup>
-import { ref, reactive } from 'vue'
+import { ref, reactive, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { User, Lock } from '@element-plus/icons-vue'
 import { useUserStore } from '@/store/user'
+import { getToken, getRememberMe, setRememberMe, getSavedUsername, saveUsername } from '@/utils/auth'
 
 const router = useRouter()
 const userStore = useUserStore()
@@ -77,6 +84,9 @@ const userStore = useUserStore()
 const formRef = ref()
 // 登录中 loading 状态
 const loading = ref(false)
+
+// 记住我复选框
+const rememberMe = ref(false)
 
 // 表单数据（reactive 适合对象类型状态）
 const loginForm = reactive({
@@ -94,6 +104,23 @@ const rules = {
   ]
 }
 
+// 页面加载时：如果 cookie 中有有效 token，直接跳转首页
+onMounted(() => {
+  // 恢复"记住我"复选框状态
+  rememberMe.value = getRememberMe()
+  // 恢复上次记住的用户名
+  const savedUsername = getSavedUsername()
+  if (savedUsername) {
+    loginForm.username = savedUsername
+  }
+
+  // 如果已有 token（cookie 或 sessionStorage），直接跳首页
+  const token = getToken()
+  if (token) {
+    router.replace('/dashboard')
+  }
+})
+
 // 登录处理
 async function handleLogin() {
   // 1. 先做前端表单校验，校验不通过则直接返回
@@ -106,7 +133,12 @@ async function handleLogin() {
   // 2. 调用 store 的 login 方法（内部会请求后端并保存 token）
   loading.value = true
   try {
-    await userStore.login(loginForm)
+    await userStore.login(loginForm, rememberMe.value)
+    // 持久化记住我的状态
+    setRememberMe(rememberMe.value)
+    if (rememberMe.value) {
+      saveUsername(loginForm.username)
+    }
     ElMessage.success('登录成功')
     // 3. 登录成功后跳转首页
     router.push('/dashboard')

@@ -27,7 +27,10 @@ public class LoginDTO implements Serializable {
     /** 用户名：登录账号，不能为空 */
     @NotBlank(message = "用户名不能为空")
     private String username;
-    /** 密码：明文传输*/
+
+    /** 密码 */
     @NotBlank(message = "密码不能为空")
     private String password;
+
+    private Boolean rememberMe;
 }

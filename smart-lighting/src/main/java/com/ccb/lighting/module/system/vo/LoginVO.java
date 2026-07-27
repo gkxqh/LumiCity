@@ -39,4 +39,6 @@ public class LoginVO implements Serializable {
 
     /** 权限标识列表（由角色→菜单聚合），用于后端接口级鉴权与前端按钮级控制 */
     private List<String> perms;
+
+    private long expireSeconds;
 }
