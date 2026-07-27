@@ -220,6 +220,7 @@ import { ref, reactive, computed, onMounted, onUnmounted } from 'vue'
 import { ElMessage, ElNotification } from 'element-plus'
 import { Search, Refresh, Edit, Bell, View } from '@element-plus/icons-vue'
 import { pageAlarm, addAlarm, handleAlarm, listUsersByRole, getWorkOrderByAlarm } from '@/api/other'
+import { listAllDevice } from '@/api/device'
 import { connectAlarmWS, onAlarmMessage, disconnectAlarmWS } from '@/api/ws'
 
 /* ---------------- 字典数据 ---------------- */
@@ -509,8 +510,28 @@ function onAlarmWsMessage(msg) {
 
 /* ---------------- 模拟告警（演示用） ---------------- */
 
+// 缓存真实设备列表，避免每次模拟告警都请求
+let realDevices = null
+
 const mocking = ref(false)
 async function handleMockAlarm() {
+  // 1. 获取真实设备列表（懒加载 + 缓存）
+  if (!realDevices) {
+    try {
+      const res = await listAllDevice()
+      realDevices = res.data || []
+    } catch {
+      realDevices = []
+    }
+  }
+  if (!realDevices.length) {
+    ElMessage.warning('数据库中暂无设备，请先生成一些设备')
+    return
+  }
+
+  // 2. 从真实设备中随机选一个
+  const dev = realDevices[Math.floor(Math.random() * realDevices.length)]
+
   const types = ['OFFLINE', 'OVERVOLTAGE', 'OVERCURRENT', 'ABNORMAL']
   const levels = [1, 2, 3]
   const atype = types[Math.floor(Math.random() * types.length)]
@@ -518,10 +539,10 @@ async function handleMockAlarm() {
   mocking.value = true
   try {
     await addAlarm({
-      deviceId: 'D-MOCK-' + Math.floor(Math.random() * 9000 + 1000),
+      deviceId: dev.deviceCode,
       alarmType: atype,
       alarmLevel: level,
-      alarmContent: `模拟${typeText[atype]}：用于演示 WebSocket 实时推送`
+      alarmContent: `${dev.deviceName} - 模拟${typeText[atype]}：用于演示 WebSocket 实时推送`
     })
     ElMessage.success('已触发模拟告警，观察实时推送')
   } finally {

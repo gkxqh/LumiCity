@@ -61,3 +61,8 @@ export function importDevice(file) {
 export function exportDevice() {
   return request({ url: '/device/export', method: 'get', responseType: 'blob' })
 }
+
+// 查询所有设备（不分页，供模拟告警等场景使用）
+export function listAllDevice() {
+  return request({ url: '/device/listAll', method: 'get' })
+}
