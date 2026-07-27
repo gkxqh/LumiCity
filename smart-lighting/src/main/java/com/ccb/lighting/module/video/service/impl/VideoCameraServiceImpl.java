@@ -51,12 +51,6 @@ public class VideoCameraServiceImpl implements VideoCameraService {
     @Override
     public IPage<VideoCamera> pageListByQuery(VideoCameraQueryDTO query) {
         LambdaQueryWrapper<VideoCamera> wrapper = new LambdaQueryWrapper<>();
-        if(query.getStatus()!=null){
-            wrapper.eq(VideoCamera::getStatus,query.getStatus());
-        }
-        if(query.getCameraName()!=null){
-            wrapper.like(VideoCamera::getCameraName,query.getCameraName());
-        }
         wrapper.orderByDesc(VideoCamera::getCreateTime);
         return videoCameraMapper.selectVideoCameraPage(
                 new Page<>(query.getCurrent(), query.getSize()),
