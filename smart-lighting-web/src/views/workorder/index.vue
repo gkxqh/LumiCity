@@ -1,12 +1,12 @@
 <!--
   工单运维页
-  - 搜索栏：工单类型 / 状态 / 查询
+  - 搜索栏：工单类型 / 状态 / 设备编号 / 查询
   - 表格：工单编号、类型、标题、设备、优先级(Tag)、状态(步骤标签)、创建时间、操作
-  - 操作按钮按状态显示：
-      待处理 → 派单
-      处理中 → 处理
-      已处理 → 验收
-  - 新增工单弹窗、派单弹窗（选择处理人）、处理弹窗（处理备注）
+  - 操作按钮（仅处理中显示"处理"，其余无操作）：
+      待处理(手动) → 派单
+      处理中       → 填写处理备注 → 直接到已完成
+      已完成       → 终点，不显示按钮
+  - 新增工单弹窗、派单弹窗（选择处理人）、处理弹窗（填写处理备注）
   - 分页
 -->
 <template>
@@ -34,10 +34,13 @@
             />
           </el-select>
         </el-form-item>
+        <el-form-item label="设备编号">
+          <el-input v-model="query.deviceId" placeholder="输入设备编号" clearable style="width: 180px" />
+        </el-form-item>
         <el-form-item>
           <el-button type="primary" :icon="Search" @click="handleSearch">查询</el-button>
           <el-button :icon="Refresh" @click="handleReset">重置</el-button>
-          <el-button type="success" :icon="Plus" @click="openAdd">新增工单</el-button>
+          <el-button v-if="pageType === 'manual'" type="success" :icon="Plus" @click="openAdd">新增工单</el-button>
         </el-form-item>
       </el-form>
     </el-card>
@@ -71,31 +74,25 @@
         <el-table-column prop="createTime" label="创建时间" width="170" />
         <el-table-column label="操作" width="130" fixed="right" align="center">
           <template #default="{ row }">
-            <!-- 待处理：派单（仅手动创建的工单；告警关联的工单跳过派单） -->
+            <!-- 已完成：终点，无操作 -->
+            <span v-if="row.status === 2">—</span>
+            <!-- 处理中：显示"处理"按钮（告警工单/手动工单都走这个分支） -->
             <el-button
-              v-if="row.status === 0 && !row.alarmId"
-              type="primary"
-              link
-              :icon="User"
-              @click="openAssign(row)"
-            >派单</el-button>
-            <!-- 待处理（告警关联）或 处理中：处理 -->
-            <el-button
-              v-else-if="row.status === 0 || row.status === 1"
+              v-else-if="row.status === 1"
               type="warning"
               link
               :icon="Edit"
               @click="openHandle(row)"
             >处理</el-button>
-            <!-- 已完成：验收 -->
+            <!-- 待处理：仅手动工单有（status=0 且无 alarmId），告警工单初始就是处理中 -->
             <el-button
-              v-else-if="row.status === 2"
-              type="success"
+              v-else-if="row.status === 0"
+              type="primary"
               link
-              :icon="Check"
-              @click="handleFinish(row)"
-            >验收</el-button>
-            <!-- 其他状态：不显示 -->
+              :icon="User"
+              @click="openAssign(row)"
+            >派单</el-button>
+            <!-- 其他情况（理论上不会出现） -->
             <span v-else>—</span>
           </template>
         </el-table-column>
@@ -236,16 +233,23 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted } from 'vue'
-import { ElMessage, ElMessageBox } from 'element-plus'
-import { Search, Refresh, Plus, Edit, Check, User } from '@element-plus/icons-vue'
+import { ref, reactive, computed, onMounted, watch } from 'vue'
+import { useRoute } from 'vue-router'
+import { ElMessage } from 'element-plus'
+import { Search, Refresh, Plus, Edit, User } from '@element-plus/icons-vue'
 import {
   pageWorkOrder,
   addWorkOrder,
   assignWorkOrder,
   handleWorkOrder,
-  finishWorkOrder
+  listUsersByRole
 } from '@/api/other'
+
+const route = useRoute()
+
+// 当前页面类型：alarm=告警工单 / manual=运维创建工单
+const pageType = computed(() => route.meta?.type || 'alarm')
+const pageTitle = computed(() => pageType.value === 'alarm' ? '告警工单' : '运维创建工单')
 
 /* ---------------- 字典数据 ---------------- */
 
@@ -256,18 +260,17 @@ const typeOptions = [
 ]
 const typeMap = Object.fromEntries(typeOptions.map(i => [i.value, i.label]))
 
-// 工单状态选项：value 对齐后端 Integer status（0待处理 1处理中 2已完成 3已验收）
+// 工单状态选项：value 对齐后端 Integer status（0待处理 1处理中 2已完成）
 const statusOptions = [
   { label: '待处理', value: 0 },
   { label: '处理中', value: 1 },
-  { label: '已完成', value: 2 },
-  { label: '已验收', value: 3 }
+  { label: '已完成', value: 2 }
 ]
-const statusMap = Object.fromEntries(statusOptions.map(i => [i.value, i.label]))
+const statusMap = { 0: '待处理', 1: '处理中', 2: '已完成' }
 
 // 状态 Tag 颜色
 function statusTagType(status) {
-  return { 0: 'danger', 1: 'warning', 2: 'primary', 3: 'success' }[status] || 'info'
+  return { 0: 'danger', 1: 'warning', 2: 'success' }[status] || 'info'
 }
 
 // 优先级选项：value 对齐后端 Integer priority（1高 2中 3低）
@@ -283,22 +286,32 @@ function priorityTagType(p) {
   return { 1: 'danger', 2: 'warning', 3: 'info' }[p] || 'info'
 }
 
-// 处理人下拉选项（实际项目应从用户接口获取，这里给出示例）
-const assigneeOptions = [
-  { label: '张三（维修一组）', value: 1001 },
-  { label: '李四（维修二组）', value: 1002 },
-  { label: '王五（巡检组）', value: 1003 },
-  { label: '赵六（外协）', value: 1004 }
-]
+// 处理人下拉选项（从后端加载巡检人员）
+const assigneeOptions = ref([])
+
+async function loadAssignees() {
+  try {
+    const res = await listUsersByRole('INSPECTOR')
+    // 后端返回 [{ id, username, nickname }]，前端显示 nickname，value 用 id
+    assigneeOptions.value = (res.data || []).map(user => ({
+      label: user.nickname || user.username,
+      value: user.id
+    }))
+  } catch {
+    // 加载失败不影响主流程
+  }
+}
 
 /* ---------------- 查询 & 表格 ---------------- */
 
-// 分页参数用 current/size，对齐后端 PageQuery
+// 分页参数：对齐后端 WorkOrderQueryDTO（orderType / status / deviceId / alarmId）
 const query = reactive({
   current: 1,
   size: 10,
   orderType: '',
-  status: null
+  status: null,
+  deviceId: '',
+  alarmId: null
 })
 
 const tableData = ref([])
@@ -306,6 +319,8 @@ const total = ref(0)
 const loading = ref(false)
 
 async function loadData() {
+  // 根据页面类型自动设置 alarmId 过滤条件
+  query.alarmId = pageType.value === 'alarm' ? 1 : 0
   loading.value = true
   try {
     const res = await pageWorkOrder(query)
@@ -325,6 +340,7 @@ function handleSearch() {
 function handleReset() {
   query.orderType = ''
   query.status = null
+  query.deviceId = ''
   query.current = 1
   loadData()
 }
@@ -474,31 +490,26 @@ async function handleWorkOrderSubmit() {
   }
   handleSubmitting.value = true
   try {
-    await handleWorkOrder(handleForm.id)
-    ElMessage.success('处理已提交')
+    await handleWorkOrder(handleForm.id, { handleRemark: handleForm.handleRemark })
+    ElMessage.success('工单处理完成')
     handleDialogVisible.value = false
     loadData()
+  } catch (e) {
+    ElMessage.error(e.message || '操作失败')
   } finally {
     handleSubmitting.value = false
   }
 }
 
-/* ---------------- 验收 ---------------- */
-
-async function handleFinish(row) {
-  await ElMessageBox.confirm(
-    `确定验收通过工单「${row.title}」吗？`,
-    '验收确认',
-    { type: 'success', confirmButtonText: '验收通过', cancelButtonText: '取消' }
-  )
-  await finishWorkOrder(row.id)
-  ElMessage.success('验收成功，工单已完结')
-  loadData()
-}
-
 /* ---------------- 初始化 ---------------- */
 
 onMounted(() => {
+  loadData()
+  loadAssignees()
+})
+
+// 切换子菜单（告警工单/运维创建工单）时重新加载
+watch(() => route.meta?.type, () => {
   loadData()
 })
 </script>

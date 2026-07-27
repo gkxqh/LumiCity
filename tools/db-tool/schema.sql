@@ -8,7 +8,7 @@
 --   1. 系统基础表：sys_user / sys_role / sys_user_role / sys_menu / sys_role_menu
 --   2. 设备基础表：dev_pole / dev_device
 --   3. 业务表：light_strategy / energy_record / alarm_record
---              video_camera / env_sensor_data / led_program / work_order
+--              video_camera / led_program / work_order
 --
 -- 通用约定：
 --   - 主键 id BIGINT AUTO_INCREMENT
@@ -188,7 +188,7 @@ CREATE TABLE dev_device (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='设备表';
 
 -- =============================================================================
--- 3. 业务表（照明策略、能耗、告警、视频、环境、LED节目、工单）
+-- 3. 业务表（照明策略、能耗、告警、视频、LED节目、工单）
 -- =============================================================================
 
 -- -----------------------------------------------------------------------------
@@ -294,33 +294,6 @@ CREATE TABLE video_camera (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='视频摄像头表';
 
 -- -----------------------------------------------------------------------------
--- env_sensor_data 环境传感器数据表
--- 灯杆挂载的环境传感器采集的温湿度、PM2.5、噪声等数据（时序数据）
--- -----------------------------------------------------------------------------
-DROP TABLE IF EXISTS env_sensor_data;
-CREATE TABLE env_sensor_data (
-    id             BIGINT        NOT NULL AUTO_INCREMENT COMMENT '主键ID',
-    pole_id        BIGINT        NOT NULL COMMENT '灯杆ID',
-    temperature    DECIMAL(5,2)           COMMENT '温度(℃)',
-    humidity      DECIMAL(5,2)            COMMENT '湿度(%)',
-    pm25          DECIMAL(6,2)            COMMENT 'PM2.5(μg/m³)',
-    pm10          DECIMAL(6,2)            COMMENT 'PM10(μg/m³)',
-    noise         DECIMAL(6,2)            COMMENT '噪声(dB)',
-    illumination  DECIMAL(8,2)            COMMENT '光照(lux)',
-    wind_speed    DECIMAL(5,2)            COMMENT '风速(m/s)',
-    wind_direction VARCHAR(10)           COMMENT '风向(如 N/NE/E)',
-    record_time   DATETIME      NOT NULL COMMENT '记录时间',
-    create_time   DATETIME                COMMENT '创建时间',
-    update_time   DATETIME                COMMENT '更新时间',
-    create_by     BIGINT                  COMMENT '创建人',
-    update_by     BIGINT                  COMMENT '更新人',
-    deleted       TINYINT      DEFAULT 0  COMMENT '逻辑删除：0未删 1已删',
-    PRIMARY KEY (id),
-    KEY idx_pole_id (pole_id),
-    KEY idx_record_time (record_time)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='环境传感器数据表';
-
--- -----------------------------------------------------------------------------
 -- led_program LED节目表
 -- LED 屏播放的节目内容、播放模式、发布状态
 -- -----------------------------------------------------------------------------
@@ -348,7 +321,7 @@ CREATE TABLE led_program (
 
 -- -----------------------------------------------------------------------------
 -- work_order 工单表
--- 设备故障/巡检任务的运维工单，形成 创建→派单→处理→完成→验收 闭环
+-- 设备故障/巡检任务的运维工单，形成 创建→派单→处理→完成 闭环
 -- -----------------------------------------------------------------------------
 DROP TABLE IF EXISTS work_order;
 CREATE TABLE work_order (
@@ -362,7 +335,8 @@ CREATE TABLE work_order (
     pole_id      BIGINT                  COMMENT '灯杆ID',
     assignee_id  BIGINT                  COMMENT '指派人ID',
     priority     TINYINT       DEFAULT 2 COMMENT '优先级：1高 2中 3低',
-    status       TINYINT       DEFAULT 0 COMMENT '状态：0待处理 1处理中 2已完成 3已验收',
+    status       TINYINT       DEFAULT 0 COMMENT '状态：0待处理 1处理中 2已完成',
+    handle_remark VARCHAR(1000)          COMMENT '处理备注（处理工单时填写）',
     finish_time  DATETIME                COMMENT '完成时间',
     create_time  DATETIME                COMMENT '创建时间',
     update_time  DATETIME                COMMENT '更新时间',
@@ -483,30 +457,23 @@ SET @video_menu_id = LAST_INSERT_ID();
 INSERT INTO sys_menu (parent_id, menu_name, menu_type, path, component, perms, icon, sort, visible, status, create_time, update_time)
 VALUES (@video_menu_id, '摄像头管理', 'MENU', '/video/camera', 'video/camera/index', 'video:camera:list', 'VideoCamera', 1, 1, 1, NOW(), NOW());
 
--- 一级目录：环境监测
-INSERT INTO sys_menu (parent_id, menu_name, menu_type, path, component, perms, icon, sort, visible, status, create_time, update_time)
-VALUES (0, '环境监测', 'DIRECTORY', '/env', NULL, NULL, 'Aim', 7, 1, 1, NOW(), NOW());
-SET @env_menu_id = LAST_INSERT_ID();
-INSERT INTO sys_menu (parent_id, menu_name, menu_type, path, component, perms, icon, sort, visible, status, create_time, update_time)
-VALUES (@env_menu_id, '环境数据', 'MENU', '/env/data', 'env/data/index', 'env:data:list', 'DataAnalysis', 1, 1, 1, NOW(), NOW());
-
 -- 一级目录：信息发布
 INSERT INTO sys_menu (parent_id, menu_name, menu_type, path, component, perms, icon, sort, visible, status, create_time, update_time)
-VALUES (0, '信息发布', 'DIRECTORY', '/publish', NULL, NULL, 'ChatDotRound', 8, 1, 1, NOW(), NOW());
+VALUES (0, '信息发布', 'DIRECTORY', '/publish', NULL, NULL, 'ChatDotRound', 7, 1, 1, NOW(), NOW());
 SET @publish_menu_id = LAST_INSERT_ID();
 INSERT INTO sys_menu (parent_id, menu_name, menu_type, path, component, perms, icon, sort, visible, status, create_time, update_time)
 VALUES (@publish_menu_id, 'LED节目', 'MENU', '/publish/program', 'publish/program/index', 'publish:program:list', 'Film', 1, 1, 1, NOW(), NOW());
 
 -- 一级目录：工单运维
 INSERT INTO sys_menu (parent_id, menu_name, menu_type, path, component, perms, icon, sort, visible, status, create_time, update_time)
-VALUES (0, '工单运维', 'DIRECTORY', '/workorder', NULL, NULL, 'Tickets', 9, 1, 1, NOW(), NOW());
+VALUES (0, '工单运维', 'DIRECTORY', '/workorder', NULL, NULL, 'Tickets', 8, 1, 1, NOW(), NOW());
 SET @workorder_menu_id = LAST_INSERT_ID();
 INSERT INTO sys_menu (parent_id, menu_name, menu_type, path, component, perms, icon, sort, visible, status, create_time, update_time)
 VALUES (@workorder_menu_id, '工单管理', 'MENU', '/workorder/list', 'workorder/list/index', 'workorder:list:list', 'Document', 1, 1, 1, NOW(), NOW());
 
 -- 一级目录：数据大盘
 INSERT INTO sys_menu (parent_id, menu_name, menu_type, path, component, perms, icon, sort, visible, status, create_time, update_time)
-VALUES (0, '数据大盘', 'DIRECTORY', '/dashboard', NULL, NULL, 'Odometer', 10, 1, 1, NOW(), NOW());
+VALUES (0, '数据大盘', 'DIRECTORY', '/dashboard', NULL, NULL, 'Odometer', 9, 1, 1, NOW(), NOW());
 SET @dashboard_menu_id = LAST_INSERT_ID();
 INSERT INTO sys_menu (parent_id, menu_name, menu_type, path, component, perms, icon, sort, visible, status, create_time, update_time)
 VALUES (@dashboard_menu_id, '首页大盘', 'MENU', '/dashboard/index', 'dashboard/index/index', 'dashboard:index:list', 'DataBoard', 1, 1, 1, NOW(), NOW());

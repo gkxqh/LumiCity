@@ -23,6 +23,14 @@ service.interceptors.request.use(
 // 响应拦截器：统一处理后端返回的 Result 结构
 service.interceptors.response.use(
   response => {
+    // 二进制响应（抓拍图 / 文件导出等）：直接返回原始数据，不走 Result 结构校验
+    if (response.config && response.config.responseType === 'blob') {
+      if (response.status === 401) {
+        removeToken()
+        router.push('/login')
+      }
+      return response.data
+    }
     const res = response.data
     if (res.code === 200) {
       return res

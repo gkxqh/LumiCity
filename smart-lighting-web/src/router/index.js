@@ -17,9 +17,17 @@ const routes = [
       { path: 'energy', name: 'Energy', meta: { title: '能耗管理', icon: 'Lightning', perms: ['energy:record:list'] }, component: () => import('@/views/energy/index.vue') },
       { path: 'alarm', name: 'Alarm', meta: { title: '故障告警', icon: 'Warning', perms: ['alarm:record:list'] }, component: () => import('@/views/alarm/index.vue') },
       { path: 'video', name: 'Video', meta: { title: '视频监控', icon: 'VideoCamera', perms: ['video:camera:list'] }, component: () => import('@/views/video/index.vue') },
-      { path: 'environment', name: 'Environment', meta: { title: '环境监测', icon: 'Cloudy', perms: ['env:data:list'] }, component: () => import('@/views/environment/index.vue') },
       { path: 'publish', name: 'Publish', meta: { title: '信息发布', icon: 'Film', perms: ['publish:program:list'] }, component: () => import('@/views/publish/index.vue') },
-      { path: 'workorder', name: 'WorkOrder', meta: { title: '工单运维', icon: 'Document', perms: ['workorder:list:list'] }, component: () => import('@/views/workorder/index.vue') },
+      {
+        path: 'workorder',
+        name: 'WorkOrder',
+        meta: { title: '工单运维', icon: 'Document', perms: ['workorder:list:list'] },
+        redirect: '/workorder/alarm',
+        children: [
+          { path: 'alarm', name: 'WorkOrderAlarm', meta: { title: '告警工单', type: 'alarm' }, component: () => import('@/views/workorder/index.vue') },
+          { path: 'manual', name: 'WorkOrderManual', meta: { title: '运维创建工单', type: 'manual' }, component: () => import('@/views/workorder/index.vue') }
+        ]
+      },
       { path: 'system', name: 'System', meta: { title: '系统管理', icon: 'Setting', perms: ['system:user:list'] }, component: () => import('@/views/system/index.vue') },
       { path: 'system/permission', name: 'Permission', meta: { title: '权限管理', icon: 'Lock', perms: ['system:role:list'] }, component: () => import('@/views/system/permission.vue') }
     ]

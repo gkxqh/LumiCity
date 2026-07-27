@@ -14,8 +14,23 @@
         text-color="#bfcbd9"
         active-text-color="#409EFF"
       >
-        <template v-for="item in menuList" :key="item.path">
-          <el-menu-item :index="item.path">
+        <template v-for="item in menuTree" :key="item.path">
+          <!-- 有子菜单 -->
+          <el-sub-menu v-if="item.children && item.children.length > 0" :index="item.path">
+            <template #title>
+              <el-icon><component :is="item.meta.icon" /></el-icon>
+              <span>{{ item.meta.title }}</span>
+            </template>
+            <el-menu-item
+              v-for="child in item.children"
+              :key="child.path"
+              :index="'/' + child.path"
+            >
+              {{ child.meta.title }}
+            </el-menu-item>
+          </el-sub-menu>
+          <!-- 普通菜单项 -->
+          <el-menu-item v-else :index="'/' + item.path">
             <el-icon><component :is="item.meta.icon" /></el-icon>
             <span>{{ item.meta.title }}</span>
           </el-menu-item>
@@ -73,23 +88,29 @@ const isCollapse = ref(false)
 // 提供给子组件（dashboard）控制侧边栏折叠
 provide('sidebarCollapse', isCollapse)
 
-// 根据用户权限过滤侧边栏菜单（响应式 computed，随 userStore.roles/perms 变化自动刷新）
+// 根据用户权限过滤侧边栏菜单
 function hasPerm(perms) {
   if (!perms || perms.length === 0) return true
   const isAdmin = userStore.roles.includes('ADMIN')
   return isAdmin || perms.some(p => userStore.perms.includes(p))
 }
 
-const allRoutes = router.getRoutes()
-const menuList = computed(() => {
-  const list = allRoutes
-    .filter(r => r.meta && r.meta.title && r.path !== '/dashboard' && hasPerm(r.meta.perms))
-    .map(r => ({ path: r.path, meta: r.meta }))
-  const dashboardRoute = allRoutes.find(r => r.path === '/dashboard')
-  if (dashboardRoute) {
-    list.unshift({ path: '/dashboard', meta: dashboardRoute.meta })
-  }
-  return list
+// 从路由定义构建菜单树（区分子菜单和普通菜单项）
+const menuTree = computed(() => {
+  const layoutRoute = router.options.routes.find(r => r.path === '/')
+  if (!layoutRoute || !layoutRoute.children) return []
+  return layoutRoute.children
+    .filter(r => r.meta && r.meta.title && hasPerm(r.meta.perms))
+    .map(r => ({
+      path: r.path,
+      meta: r.meta,
+      children: r.children
+        ? r.children.filter(c => hasPerm(c.meta?.perms)).map(c => ({
+            path: r.path + '/' + c.path,
+            meta: c.meta
+          }))
+        : null
+    }))
 })
 
 async function handleCommand(cmd) {

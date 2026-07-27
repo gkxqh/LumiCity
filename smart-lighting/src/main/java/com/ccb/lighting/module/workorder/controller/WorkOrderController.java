@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.ccb.lighting.common.PageQuery;
 import com.ccb.lighting.common.Result;
 import com.ccb.lighting.module.system.entity.SysUser;
+import com.ccb.lighting.module.workorder.dto.WorkOrderQueryDTO;
 import com.ccb.lighting.module.workorder.entity.WorkOrder;
 import com.ccb.lighting.module.workorder.service.WorkOrderService;
 import jakarta.validation.Valid;
@@ -48,8 +49,8 @@ public class WorkOrderController {
      * @return 分页数据
      */
     @GetMapping("/page")
-    public Result<IPage<WorkOrder>> page(PageQuery query) {
-        return Result.success(workOrderService.pageList(query));
+    public Result<IPage<WorkOrder>> page(WorkOrderQueryDTO query) {
+        return Result.success(workOrderService.pageListByQuery(query));
     }
 
     /**
@@ -93,15 +94,17 @@ public class WorkOrderController {
     }
 
     /**
-     * 处理工单
-     * 运维人员接单后开始处理，状态推进到 1 处理中
+     * 处理工单（处理即完成）
+     * 填写处理备注后，状态从 1 处理中 → 2 已完成，记录完成时间；
+     * 告警关联工单同时推送 workorder_finished 事件
      *
-     * @param id 工单 ID
+     * @param id            工单 ID
+     * @param handleRemark  处理备注
      * @return 操作结果
      */
     @PutMapping("/handle/{id}")
-    public Result<Void> handle(@PathVariable Long id) {
-        workOrderService.handle(id);
+    public Result<Void> handle(@PathVariable Long id, @RequestParam(required = false) String handleRemark) {
+        workOrderService.handle(id, handleRemark);
         return Result.success();
     }
 
@@ -117,4 +120,17 @@ public class WorkOrderController {
         workOrderService.finish(id);
         return Result.success();
     }
+
+    /**
+     * 根据告警 ID 查询关联工单
+     * 告警页面在允许编写处理意见之前，先查询关联工单是否已完成
+     *
+     * @param alarmId 告警记录 ID
+     * @return 工单信息（可能为 null）
+     */
+    @GetMapping("/by-alarm/{alarmId}")
+    public Result<WorkOrder> getByAlarmId(@PathVariable Long alarmId) {
+        return Result.success(workOrderService.getByAlarmId(alarmId));
+    }
+
 }

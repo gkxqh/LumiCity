@@ -4,6 +4,10 @@
   - 新增 / 编辑弹窗
   - 简单 CRUD，调 pageCamera / addCamera / updateCamera / deleteCamera
   - 分页
+  - 预览：按摄像头 status 分级展示
+      * 故障(status=2)：弹窗告警 + 画面红色故障遮罩
+      * 离线(status=0)：展示本地静态占位图（不连流）
+      * 在线(status=1)：流地址可连接则显示实时监控画面
 -->
 <template>
   <div class="video-page">
@@ -81,13 +85,98 @@
       />
     </el-card>
 
-    <!-- ============ 视频预览弹窗（简易演示） ============ -->
-    <el-dialog v-model="previewVisible" :title="`视频预览 - ${previewRow.cameraName}`" width="640px">
-      <div class="preview-box">
-        <!-- 实际项目里接入 flv.js / hls.js / EasyPlayer 播放 streamUrl -->
-        <el-empty description="此处接入流媒体播放器（flv.js / hls.js）" />
-        <div class="preview-url">流地址：{{ previewRow.streamUrl }}</div>
+    <!-- ============ 视频预览弹窗 ============ -->
+    <el-dialog
+      v-model="previewVisible"
+      :title="`视频预览 - ${previewRow.cameraName}`"
+      width="min(92vw, 1000px)"
+      @closed="stopPlay"
+    >
+      <!-- 工具条 -->
+      <div class="preview-toolbar">
+        <div class="toolbar-left">
+          <el-button-group>
+            <el-button :icon="ArrowLeft" @click="navigate(-1)">上一个</el-button>
+            <el-button @click="navigate(1)">下一个<i class="el-icon"><ArrowRight /></i></el-button>
+          </el-button-group>
+          <el-button :icon="Camera" :disabled="!canCapture" @click="captureSnapshot">抓拍</el-button>
+          <el-button :icon="FullScreen" @click="toggleFullscreen">全屏</el-button>
+        </div>
+        <div class="toolbar-right">
+          <el-button-group>
+            <el-button @click="zoomOut">－</el-button>
+            <el-button disabled>{{ Math.round(zoom * 100) }}%</el-button>
+            <el-button @click="zoomIn">＋</el-button>
+          </el-button-group>
+        </div>
       </div>
+
+      <!-- 播放区域 -->
+      <div ref="playerWrap" class="player-wrap">
+        <!-- 在线：HLS / MP4 用原生 video 直连 -->
+        <video
+          v-if="playMode === 'live' && (streamType === 'hls' || streamType === 'mp4')"
+          class="player-media"
+          :src="liveSrc"
+          controls
+          autoplay
+          muted
+          playsinline
+        ></video>
+
+        <!-- 在线：MJPEG 实时流 / 未知类型回退为 img 直连 -->
+        <img
+          v-else-if="playMode === 'live'"
+          class="player-media"
+          :src="liveSrc"
+          :style="mediaStyle"
+          alt="监控画面"
+          @error="onMediaError"
+        />
+
+        <!-- 在线：静态快照地址轮询 -->
+        <img
+          v-else-if="playMode === 'snapshot'"
+          class="player-media"
+          :src="snapshotSrc"
+          :style="mediaStyle"
+          alt="监控画面"
+          @error="onMediaError"
+        />
+
+        <!-- 离线：本地静态占位图（不连流） -->
+        <img
+          v-else-if="playMode === 'offline'"
+          class="player-media"
+          :src="staticOfflineSrc"
+          :style="mediaStyle"
+          alt="摄像头离线"
+        />
+
+        <!-- 故障：红色遮罩 -->
+        <div v-else-if="playMode === 'fault'" class="player-fault">
+          <el-icon :size="54" color="#f56c6c"><WarningFilled /></el-icon>
+          <div class="fault-title">摄像头故障</div>
+          <div class="fault-sub">请及时维修或更换</div>
+        </div>
+
+        <!-- CCTV 风格叠加层（仅实时画面时显示） -->
+        <div v-if="playMode === 'live' || playMode === 'snapshot'" class="cctv-overlay">
+          <div class="cctv-top">
+            <span class="cctv-name">{{ previewRow.cameraName }}</span>
+            <el-tag size="small" :type="statusTagType(previewRow.status)" effect="dark">
+              {{ statusMap[previewRow.status] }}
+            </el-tag>
+          </div>
+          <div class="cctv-rec"><span class="rec-dot"></span>REC {{ recTime }}</div>
+        </div>
+
+        <!-- 兼容性提示条 -->
+        <div v-if="playerHint" class="player-hint">{{ playerHint }}</div>
+      </div>
+
+      <!-- 流地址展示 -->
+      <div class="preview-url">流地址：{{ previewRow.streamUrl }}</div>
     </el-dialog>
 
     <!-- ============ 新增/编辑弹窗 ============ -->
@@ -118,7 +207,7 @@
           </el-select>
         </el-form-item>
         <el-form-item label="流地址" prop="streamUrl">
-          <el-input v-model="form.streamUrl" placeholder="如 rtsp://xxx / http://xxx.m3u8" />
+          <el-input v-model="form.streamUrl" placeholder="如 rtsp://xxx / http://xxx.m3u8 / http://xxx.mjpg" />
         </el-form-item>
         <el-form-item label="云台支持" prop="ptzEnable">
           <el-switch v-model="form.ptzEnable" :active-value="1" :inactive-value="0" active-text="支持" inactive-text="不支持" />
@@ -144,10 +233,13 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted, nextTick } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Search, Refresh, Plus, Edit, Delete, VideoPlay } from '@element-plus/icons-vue'
-import { pageCamera, addCamera, updateCamera, deleteCamera } from '@/api/other'
+import {
+  Search, Refresh, Plus, Edit, Delete, VideoPlay,
+  Camera, FullScreen, WarningFilled, ArrowLeft, ArrowRight
+} from '@element-plus/icons-vue'
+import { pageCamera, addCamera, updateCamera, deleteCamera, getSnapshot } from '@/api/other'
 import { listPole } from '@/api/device'
 
 /* ---------------- 字典数据 ---------------- */
@@ -215,14 +307,255 @@ function handleReset() {
   loadData()
 }
 
-/* ---------------- 视频预览 ---------------- */
+/* ---------------- 视频预览（状态分级） ---------------- */
 
 const previewVisible = ref(false)
-const previewRow = reactive({ cameraName: '', streamUrl: '' })
+const previewRow = reactive({ id: null, cameraName: '', streamUrl: '', status: 1 })
+
+const playMode = ref('')        // live / snapshot / offline / rtsp / fault
+const streamType = ref('')      // hls / mp4 / mjpeg / image / rtsp / unknown
+const liveSrc = ref('')         // 直连流（video 或 img）
+const snapshotSrc = ref('')     // 快照轮询地址（直连或后端抓拍）
+const snapshotSource = ref('')  // 'direct' 直连图片轮询 / 'backend' 后端 AWT 抓拍
+const staticOfflineSrc = ref('')// 离线静态图
+const recTime = ref('')         // CCTV 时间码
+const zoom = ref(1)             // 画面缩放
+const playerWrap = ref(null)
+
+let snapshotTimer = null
+let clockTimer = null
+let backendSnapshotUrl = null   // 后端抓拍生成的 objectURL，需手动释放
+
+// 离线静态占位图（SVG data URI）：摄像头离线时展示，不尝试连接流
+const STATIC_OFFLINE_IMG =
+  'data:image/svg+xml;utf8,' + encodeURIComponent(
+    `<svg xmlns="http://www.w3.org/2000/svg" width="640" height="360" viewBox="0 0 640 360">
+       <rect width="640" height="360" fill="#232323"/>
+       <g transform="translate(235,118)">
+         <rect x="20" y="30" width="120" height="80" rx="10" fill="#333" stroke="#888" stroke-width="3"/>
+         <rect x="140" y="55" width="42" height="30" rx="6" fill="#333" stroke="#888" stroke-width="3"/>
+         <circle cx="66" cy="70" r="20" fill="#232323" stroke="#888" stroke-width="3"/>
+         <line x1="10" y1="20" x2="185" y2="125" stroke="#e06c6c" stroke-width="5" stroke-linecap="round"/>
+       </g>
+       <text x="320" y="248" fill="#cfcfcf" font-size="22" text-anchor="middle" font-family="sans-serif">摄像头已离线</text>
+       <text x="320" y="280" fill="#8a8a8a" font-size="15" text-anchor="middle" font-family="sans-serif">暂无可显示画面</text>
+     </svg>`
+  )
+
+// 媒体缩放样式
+const mediaStyle = computed(() => ({
+  transform: `scale(${zoom.value})`
+}))
+
+// 当前是否可用"抓拍"（仅实时画面时）
+const canCapture = computed(() => playMode.value === 'live' || playMode.value === 'snapshot')
+
+// 浏览器兼容性提示
+function isSafari() {
+  const ua = navigator.userAgent
+  return /Safari/.test(ua) && !/Chrome/.test(ua)
+}
+const playerHint = computed(() => {
+  if (playMode.value === 'live' && streamType.value === 'hls' && !isSafari()) {
+    return '当前为 HLS 流，建议使用 Safari 或引入 hls.js 以获得最佳兼容。'
+  }
+  return ''
+})
+
+// 识别流地址类型，自动选择播放方案（无需手动配置播放器）
+function detectStreamType(url) {
+  if (!url) return 'unknown'
+  const u = url.toLowerCase()
+  if (u.startsWith('rtsp://') || u.startsWith('rtsps://')) return 'rtsp'
+  if (u.includes('.m3u8')) return 'hls'
+  if (u.includes('.mp4') || u.includes('.webm')) return 'mp4'
+  if (u.includes('.mjpg') || u.includes('.mjpeg') ||
+      u.includes('getoneshot') || u.includes('nphmotionjpeg') ||
+      u.includes('mjpeg') || u.includes('multipart')) return 'mjpeg'
+  if (u.includes('.jpg') || u.includes('.jpeg') || u.includes('.png')) return 'image'
+  return 'unknown'
+}
+
+// 停止并清理所有播放状态/定时器
+function stopPlay() {
+  if (snapshotTimer) { clearInterval(snapshotTimer); snapshotTimer = null }
+  if (clockTimer) { clearInterval(clockTimer); clockTimer = null }
+  if (backendSnapshotUrl) { URL.revokeObjectURL(backendSnapshotUrl); backendSnapshotUrl = null }
+  liveSrc.value = ''
+  snapshotSrc.value = ''
+  staticOfflineSrc.value = ''
+  recTime.value = ''
+  zoom.value = 1
+  playMode.value = ''
+  streamType.value = ''
+  snapshotSource.value = ''
+}
+
+// 启动 CCTV 时间码
+function startClock() {
+  const tick = () => {
+    recTime.value = new Date().toLocaleString('zh-CN', { hour12: false })
+  }
+  tick()
+  clockTimer = setInterval(tick, 1000)
+}
+
+// 快照地址轮询（每秒刷新，加时间戳防缓存）—— 直连公开图片/快照地址
+function startSnapshotLoop(url) {
+  const tick = () => {
+    snapshotSrc.value = url + (url.includes('?') ? '&' : '?') + '_t=' + Date.now()
+  }
+  tick()
+  snapshotTimer = setInterval(tick, 1000)
+}
+
+// 后端抓拍轮询（RTSP 等无法直连时的兜底）：每秒请求一张后端绘制的 JPEG
+async function startBackendSnapshotLoop(id) {
+  const tick = async () => {
+    try {
+      const blob = await getSnapshot(id)
+      const url = URL.createObjectURL(blob)
+      if (backendSnapshotUrl) URL.revokeObjectURL(backendSnapshotUrl)
+      backendSnapshotUrl = url
+      snapshotSrc.value = url
+    } catch (e) {
+      // 单帧失败忽略，下一秒重试；打印以便排查
+      console.warn('[snapshot] 获取抓拍帧失败：', e?.message || e)
+    }
+  }
+  tick()
+  snapshotTimer = setInterval(tick, 1000)
+}
+
+// 开始预览：先按 status 分级
+function startPlay(row) {
+  stopPlay()
+  previewRow.id = row.id
+  previewRow.cameraName = row.cameraName
+  previewRow.streamUrl = row.streamUrl
+  previewRow.status = row.status
+
+  // 故障：弹窗告警 + 红色遮罩，不尝试播放
+  if (row.status === 2) {
+    playMode.value = 'fault'
+    nextTick(() => {
+      ElMessageBox.alert('摄像头故障，请及时维修或更换。', '设备告警', {
+        type: 'error',
+        confirmButtonText: '我知道了',
+        showClose: false
+      })
+    })
+    return
+  }
+
+  // 离线：展示静态占位图，不连接流
+  if (row.status === 0) {
+    playMode.value = 'offline'
+    staticOfflineSrc.value = STATIC_OFFLINE_IMG
+    return
+  }
+
+  // 在线：流地址可连接则显示实时监控画面
+  const type = detectStreamType(row.streamUrl)
+  streamType.value = type
+  startClock()
+
+  if (type === 'rtsp') {
+    // 浏览器原生不支持 RTSP：回退到后端实时抓拍图（AWT 绘制）轮询，模拟实时监控画面
+    playMode.value = 'snapshot'
+    snapshotSource.value = 'backend'
+    startBackendSnapshotLoop(row.id)
+    return
+  }
+  if (type === 'mjpeg' || type === 'hls' || type === 'mp4') {
+    // 直连播放：MJPEG 走 img，HLS/MP4 走 video
+    playMode.value = 'live'
+    liveSrc.value = row.streamUrl
+    return
+  }
+  if (type === 'image') {
+    // 静态快照地址：轮询刷新模拟实时
+    playMode.value = 'snapshot'
+    snapshotSource.value = 'direct'
+    startSnapshotLoop(row.streamUrl)
+    return
+  }
+  // 未知类型：尝试 img 直连
+  playMode.value = 'live'
+  liveSrc.value = row.streamUrl
+}
 
 function handlePreview(row) {
-  Object.assign(previewRow, { cameraName: row.cameraName, streamUrl: row.streamUrl })
   previewVisible.value = true
+  startPlay(row)
+}
+
+// 媒体加载失败（在线但流不可连接）
+function onMediaError() {
+  if (playMode.value === 'live' || playMode.value === 'snapshot') {
+    ElMessage.warning('实时监控画面连接失败，请检查流地址是否可访问')
+  }
+}
+
+// 上一个 / 下一个摄像头切换
+function navigate(delta) {
+  const list = tableData.value
+  if (!list.length) return
+  const idx = list.findIndex(d => d.id === previewRow.id)
+  let next = idx + delta
+  if (next < 0) next = list.length - 1
+  if (next >= list.length) next = 0
+  startPlay(list[next])
+}
+
+// 全屏
+function toggleFullscreen() {
+  const el = playerWrap.value
+  if (!el) return
+  if (!document.fullscreenElement) {
+    el.requestFullscreen?.()
+  } else {
+    document.exitFullscreen?.()
+  }
+}
+
+// 缩放
+function zoomIn() { if (zoom.value < 2) zoom.value = +(zoom.value + 0.2).toFixed(2) }
+function zoomOut() { if (zoom.value > 0.4) zoom.value = +(zoom.value - 0.2).toFixed(2) }
+
+// 抓拍截图：将当前画面经 canvas 导出 PNG 并叠加时间码
+function captureSnapshot() {
+  if (!canCapture.value) {
+    ElMessage.warning('当前无实时画面，无法抓拍')
+    return
+  }
+  const src = playMode.value === 'live' ? liveSrc.value : snapshotSrc.value
+  if (!src) return
+  const img = new Image()
+  img.crossOrigin = 'anonymous'
+  img.onload = () => {
+    try {
+      const canvas = document.createElement('canvas')
+      canvas.width = img.naturalWidth
+      canvas.height = img.naturalHeight
+      const ctx = canvas.getContext('2d')
+      ctx.drawImage(img, 0, 0)
+      ctx.fillStyle = 'rgba(0,0,0,0.55)'
+      ctx.fillRect(0, canvas.height - 28, canvas.width, 28)
+      ctx.fillStyle = '#fff'
+      ctx.font = '16px sans-serif'
+      ctx.fillText('抓拍 ' + new Date().toLocaleString('zh-CN', { hour12: false }), 10, canvas.height - 8)
+      const link = document.createElement('a')
+      link.download = `camera_${previewRow.id}_${Date.now()}.png`
+      link.href = canvas.toDataURL('image/png')
+      link.click()
+      ElMessage.success('抓拍成功')
+    } catch (e) {
+      ElMessage.error('抓拍失败：画面跨域受限，无法导出')
+    }
+  }
+  img.onerror = () => ElMessage.error('抓拍失败：画面加载异常')
+  img.src = src
 }
 
 /* ---------------- 新增/编辑弹窗 ---------------- */
@@ -332,9 +665,125 @@ onMounted(() => {
   margin-top: 16px;
   justify-content: flex-end;
 }
-.preview-box {
+
+/* 预览工具条 */
+.preview-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.toolbar-left,
+.toolbar-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* 播放区域 */
+.player-wrap {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  background: #000;
+  border-radius: 6px;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.player-media {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  transform-origin: center center;
+  background: #000;
+}
+/* 全屏时铺满视口 */
+.player-wrap:fullscreen {
+  width: 100vw;
+  height: 100vh;
+  border-radius: 0;
+}
+.player-fault {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 24px;
+  text-align: center;
+  color: #fff;
+  background: rgba(20, 20, 20, 0.72);
+}
+.player-fault .fault-title {
+  font-size: 20px;
+  font-weight: 600;
+  color: #f56c6c;
+}
+.player-fault .fault-sub {
+  font-size: 14px;
+  color: #e6a23c;
+}
+
+/* CCTV 叠加层 */
+.cctv-overlay {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+.cctv-top {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.cctv-name {
+  color: #fff;
+  font-size: 14px;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+}
+.cctv-rec {
+  align-self: flex-start;
+  color: #fff;
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.rec-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #f56c6c;
+  animation: rec-blink 1s steps(2, start) infinite;
+}
+@keyframes rec-blink {
+  to { opacity: 0.2; }
+}
+
+/* 兼容性提示条 */
+.player-hint {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(230, 162, 60, 0.92);
+  color: #1f1f1f;
+  font-size: 12px;
+  padding: 6px 12px;
   text-align: center;
 }
+
 .preview-url {
   margin-top: 12px;
   color: #909399;

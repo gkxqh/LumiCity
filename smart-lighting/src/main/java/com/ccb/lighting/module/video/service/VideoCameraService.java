@@ -1,7 +1,6 @@
 package com.ccb.lighting.module.video.service;
 
 import com.baomidou.mybatisplus.core.metadata.IPage;
-import com.ccb.lighting.common.PageQuery;
 import com.ccb.lighting.module.video.dto.VideoCameraQueryDTO;
 import com.ccb.lighting.module.video.entity.VideoCamera;
 
@@ -9,7 +8,6 @@ import com.ccb.lighting.module.video.entity.VideoCamera;
  * 视频摄像头 Service 接口
  *
  * <p>方法清单：
- * - pageList：分页查询摄像头列表
  * - getById：根据 id 查摄像头详情
  * - add：新增摄像头
  * - update：修改摄像头
@@ -18,20 +16,20 @@ import com.ccb.lighting.module.video.entity.VideoCamera;
 public interface VideoCameraService {
 
     /**
-     * 分页查询摄像头列表
-     *
-     * @param query 分页参数
-     * @return 分页对象
-     */
-    IPage<VideoCamera> pageList(PageQuery query);
-
-    /**
      * 根据 id 查询摄像头详情
      *
      * @param id 摄像头 ID
      * @return 摄像头实体
      */
     VideoCamera getById(Long id);
+
+    /**
+     * 获取摄像头抓拍图（后端实时绘制，用于 RTSP 等浏览器无法直连时的演示兜底）
+     *
+     * @param id 摄像头 ID
+     * @return JPEG 图片字节
+     */
+    byte[] getSnapshot(Long id);
 
     IPage<VideoCamera> pageListByQuery(VideoCameraQueryDTO query);
 

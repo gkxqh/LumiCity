@@ -8,7 +8,6 @@
   - 幂等：先清空业务表与测试用户（保留 admin 及初始角色/菜单），再重新生成
 """
 import random
-import math
 from datetime import datetime, timedelta, time as dtime
 
 
@@ -63,10 +62,9 @@ HANDLE_RESULTS = [
 ]
 
 ORDER_TYPES = ["INSPECT", "REPAIR"]
-ORDER_STATUS = [0, 1, 2, 3]  # 待处理/处理中/已完成/已验收
-ORDER_STATUS_WEIGHTS = [20, 30, 30, 20]
+ORDER_STATUS = [0, 1, 2]  # 待处理/处理中/已完成
+ORDER_STATUS_WEIGHTS = [20, 30, 50]
 
-WIND_DIRS = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"]
 LED_MEDIA = ["TEXT", "IMAGE", "VIDEO"]
 LED_STATUS = [0, 1, 2]  # 待发布/已发布/已下线
 
@@ -96,7 +94,7 @@ class DataGenerator:
     # ---------- 清空（保留 admin 与初始角色/菜单） ----------
     def clear(self):
         # 先删业务表（引用设备/灯杆），再删设备/灯杆
-        for t in ["energy_record", "alarm_record", "env_sensor_data", "work_order",
+        for t in ["energy_record", "alarm_record", "work_order",
                   "led_publish_log", "led_program", "light_strategy", "video_camera", "dev_device", "dev_pole"]:
             self.cur.execute(f"DELETE FROM {t}")
         # 清理角色菜单绑定并重置 OPERATOR 权限
@@ -292,7 +290,7 @@ class DataGenerator:
     def gen_alarms(self, n=50):
         users = [u for u in self._fetch_users()]
         rows = 0
-        self._alarms = []  # [(alarm_id, device_code, pole_id, alarm_type, alarm_level), ...]
+        self._alarms = []  # [(alarm_id, device_code, pole_id, alarm_type, alarm_level, status), ...]
         for _ in range(n):
             dev = random.choice(self._devices)
             atype = _weighted(ALARM_TYPES, ALARM_TYPE_WEIGHTS)
@@ -325,7 +323,7 @@ class DataGenerator:
             )
             # 保存告警ID信息（处理中/已闭环的告警可用于关联工单）
             if status in (1, 2):
-                self._alarms.append((alarm_id, dev["code"], dev["pole_id"], atype, level))
+                self._alarms.append((alarm_id, dev["code"], dev["pole_id"], atype, level, status))
             rows += 1
         self.conn.commit()
         self.counts["alarm_record"] = rows
@@ -348,47 +346,6 @@ class DataGenerator:
             cnt += 1
         self.conn.commit()
         self.counts["video_camera"] = cnt
-
-    # ---------- 环境传感器数据（时序，含昼夜变化） ----------
-    def gen_env(self, days=7):
-        sensors = [d for d in self._devices if d["type"] == "SENSOR"]
-        sample = random.sample(sensors, min(10, len(sensors))) if sensors else []
-        rows = []
-        base = self.now.replace(hour=0, minute=0, second=0, microsecond=0)
-        for dev in sample:
-            for d in range(days, 0, -1):
-                day = base - timedelta(days=d - 1)
-                day_temp_base = random.uniform(24, 30)
-                for h in range(0, 24, 1):
-                    t = day + timedelta(hours=h)
-                    # 温度：6-18点正弦上升，夜间下降
-                    temp = round(day_temp_base + 4 * math.sin(math.pi * (h - 6) / 12)
-                                 + random.uniform(-1.5, 1.5), 2) if 6 <= h <= 18 \
-                        else round(day_temp_base - 3 + random.uniform(-1, 1), 2)
-                    humidity = round(random.uniform(45, 92) - (temp - 25), 2)
-                    humidity = max(20, min(99, humidity))
-                    # PM2.5 偶发污染高峰
-                    pm25 = round(random.uniform(100, 250), 2) if random.random() < 0.05 \
-                        else round(random.uniform(8, 75), 2)
-                    pm10 = round(pm25 + random.uniform(5, 40), 2)
-                    noise = round(random.uniform(35, 55) if h < 7 or h > 22
-                                  else random.uniform(50, 72), 2)
-                    # 光照：白天正弦，夜间近 0
-                    if 6 <= h <= 18:
-                        illum = round(max(0, 80000 * math.sin(math.pi * (h - 6) / 12))
-                                      + random.uniform(-2000, 2000), 2)
-                    else:
-                        illum = round(random.uniform(0, 500), 2)
-                    wind = round(random.uniform(0, 8), 2)
-                    wdir = random.choice(WIND_DIRS)
-                    rows.append((dev["pole_id"], temp, humidity, pm25, pm10, noise,
-                                 illum, wind, wdir, t, self.now, self.now, 1, 1, 0))
-        sql = ("INSERT INTO env_sensor_data (pole_id, temperature, humidity, pm25, pm10, noise, "
-               "illumination, wind_speed, wind_direction, record_time, create_time, update_time, "
-               "create_by, update_by, deleted) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)")
-        self.cur.executemany(sql, rows)
-        self.conn.commit()
-        self.counts["env_sensor_data"] = len(rows)
 
     # ---------- LED 节目 ----------
     def gen_led(self, n=15):
@@ -435,42 +392,49 @@ class DataGenerator:
             last_seq = int(row[0].split("-")[-1])
             seq = last_seq + 1
 
-        # --- A) 告警关联工单：从已分配处理人的告警中生成约 40% 的工单 ---
+        # --- A) 告警关联工单：为每个已分配处理人的告警（status=1/2）都生成工单 ---
+        # 业务流：告警1处理中 → 系统自动生成工单(1处理中) → 工单完成后(2已完成)
+        #        → 运维写处理意见 → 告警2已闭环
+        # 所以：告警1 可以有工单1或2，告警2 工单必须为2
         alarm_related = 0
-        target_alarm_count = max(0, min(n // 2, len(self._alarms))) if hasattr(self, '_alarms') and self._alarms else 0
-        if target_alarm_count > 0:
-            selected_alarms = random.sample(
-                self._alarms,
-                min(target_alarm_count, len(self._alarms))
+        alarm_list = self._alarms if hasattr(self, '_alarms') and self._alarms else []
+        for (alarm_id, dev_code, pole_id, alarm_type, alarm_level, alarm_status) in alarm_list:
+            create_t = self.now - timedelta(days=random.randint(0, 15),
+                                            hours=random.randint(0, 23))
+            order_no = f"WO-{create_t.strftime('%Y%m%d')}-{seq:03d}"
+            seq += 1
+
+            type_text = {"OFFLINE": "离线", "OVERVOLTAGE": "过压",
+                         "OVERCURRENT": "过流", "ABNORMAL": "异常"}.get(alarm_type, alarm_type)
+            title = f"维修工单：{dev_code} - {type_text}告警"
+            assignee = random.choice(users)
+            finish = create_t + timedelta(hours=random.randint(2, 48))
+
+            # 工单状态由告警状态决定：
+            #   - 告警 status=1（处理中）→ 工单可1可2（处理人可能还没填备注）
+            #   - 告警 status=2（已闭环）→ 工单必须为2（已完成）
+            if alarm_status == 2:
+                wo_status = 2
+            else:
+                wo_status = _weighted([1, 2], [40, 60])
+            remark = random.choice(HANDLE_RESULTS) if wo_status == 2 else None
+            self._insert(
+                "work_order",
+                ["order_no", "order_type", "title", "description", "device_id", "pole_id",
+                 "assignee_id", "priority", "status", "finish_time", "handle_remark", "alarm_id",
+                 "create_time", "update_time", "create_by", "update_by", "deleted"],
+                (order_no, "REPAIR", title,
+                 f"告警自动生成：{dev_code} 触发 {type_text}告警",
+                 dev_code, pole_id, assignee[0],
+                 alarm_level, wo_status,
+                 finish if wo_status == 2 else None, remark, alarm_id,
+                 create_t, self.now, 1, 1, 0),
             )
-            for (alarm_id, dev_code, pole_id, alarm_type, alarm_level) in selected_alarms:
-                create_t = self.now - timedelta(days=random.randint(0, 15),
-                                                hours=random.randint(0, 23))
-                order_no = f"WO-{create_t.strftime('%Y%m%d')}-{seq:03d}"
-                seq += 1
+            alarm_related += 1
 
-                type_text = {"OFFLINE": "离线", "OVERVOLTAGE": "过压",
-                             "OVERCURRENT": "过流", "ABNORMAL": "异常"}.get(alarm_type, alarm_type)
-                title = f"维修工单：{dev_code} - {type_text}告警"
-                assignee = random.choice(users)
-                finish = create_t + timedelta(hours=random.randint(2, 48))
-                status = _weighted([1, 2], [40, 60])  # 处理中 / 已完成
-                self._insert(
-                    "work_order",
-                    ["order_no", "order_type", "title", "description", "device_id", "pole_id",
-                     "assignee_id", "priority", "status", "finish_time", "alarm_id",
-                     "create_time", "update_time", "create_by", "update_by", "deleted"],
-                    (order_no, "REPAIR", title,
-                     f"告警自动生成：{dev_code} 触发 {type_text}告警",
-                     dev_code, pole_id, assignee[0],
-                     alarm_level, status,
-                     finish if status >= 2 else None, alarm_id,
-                     create_t, self.now, 1, 1, 0),
-                )
-                alarm_related += 1
-
-        # --- B) 独立工单（手动创建的巡检/维修，无 alarm_id）---
-        for _ in range(n - alarm_related):
+        # --- B) 独立工单（手动创建的巡检/维修，无 alarm_id，固定约 10 个）---
+        independent_target = 10
+        for _ in range(independent_target):
             dev = random.choice(self._devices)
             otype = _weighted(ORDER_TYPES, [40, 60])
             status = _weighted(ORDER_STATUS, ORDER_STATUS_WEIGHTS)
@@ -481,22 +445,24 @@ class DataGenerator:
             title = random.choice(titles_inspect if otype == "INSPECT" else titles_repair)
             assignee = random.choice(users)[0]
             finish = None
-            if status in (2, 3):
+            remark = None
+            if status == 2:
                 finish = create_t + timedelta(hours=random.randint(2, 48))
+                remark = random.choice(HANDLE_RESULTS)
             self._insert(
                 "work_order",
                 ["order_no", "order_type", "title", "description", "device_id", "pole_id",
-                 "assignee_id", "priority", "status", "finish_time", "alarm_id",
+                 "assignee_id", "priority", "status", "finish_time", "handle_remark", "alarm_id",
                  "create_time", "update_time", "create_by", "update_by", "deleted"],
                 (order_no, otype, f"{dev['code']}-{title}",
                  f"针对设备 {dev['code']} 的{title}任务",
                  dev["code"], dev["pole_id"], assignee,
                  random.choice([1, 2, 2, 3]),
-                 status, finish, None,   # alarm_id = None
+                 status, finish, remark, None,   # alarm_id = None
                  create_t, self.now, 1, 1, 0),
             )
         self.conn.commit()
-        self.counts["work_order"] = n
+        self.counts["work_order"] = alarm_related + independent_target
 
     # ---------- 总入口 ----------
     def run(self):
@@ -509,7 +475,6 @@ class DataGenerator:
         self.gen_energy()
         self.gen_alarms()
         self.gen_cameras()
-        self.gen_env()
         self.gen_led()
         self.gen_workorders()
         self.conn.commit()

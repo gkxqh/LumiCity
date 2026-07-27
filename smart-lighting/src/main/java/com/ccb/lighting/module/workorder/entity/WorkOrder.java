@@ -103,6 +103,9 @@ public class WorkOrder extends BaseEntity implements Serializable {
     /** 完成时间：运维人员点"完成"时的时间戳，用于统计处理时长 */
     private LocalDateTime finishTime;
 
+    /** 处理备注：处理工单时填写的处理过程/结果描述 */
+    private String handleRemark;
+
     /** 告警ID：标识关联告警 */
     private Long alarmId;
 }

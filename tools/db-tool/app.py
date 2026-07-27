@@ -181,7 +181,7 @@ def init_db():
             cur.execute(s)
         conn.commit()
         logs.append(f"✓ 已执行 {len(stmts)} 条语句，数据库 {cfg['db']} 初始化完成")
-        logs.append("  - 创建 13 张表 + 初始 admin 用户 + 角色/菜单")
+        logs.append("  - 创建 12 张表 + 初始 admin 用户 + 角色/菜单")
         return jsonify({"ok": True, "logs": logs})
     except Exception as e:
         conn.rollback()
@@ -209,7 +209,7 @@ def gen_data():
         logs.append("✓ 测试数据生成完成（保留 admin 及初始角色/菜单）：")
         order = ["sys_user", "dev_pole", "dev_device", "light_strategy",
                  "energy_record", "alarm_record", "video_camera",
-                 "env_sensor_data", "led_program", "work_order"]
+                 "led_program", "work_order"]
         for k in order:
             if k in counts:
                 logs.append(f"  - {k}: 新增 {counts[k]} 条")
@@ -276,7 +276,7 @@ def overview():
         cur = conn.cursor()
         tables = ["sys_user", "sys_role", "sys_menu", "dev_pole", "dev_device",
                   "light_strategy", "energy_record", "alarm_record", "video_camera",
-                  "env_sensor_data", "led_program", "work_order"]
+                  "led_program", "work_order"]
         counts = {}
         for t in tables:
             cur.execute(f"SELECT COUNT(*) FROM {t} WHERE deleted=0")

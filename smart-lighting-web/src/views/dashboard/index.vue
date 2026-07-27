@@ -2,7 +2,7 @@
   数据大盘（大屏版）
   - 顶部：标题 + 实时时钟
   - 第二行：6 个核心指标卡片（带图标水印 + 等宽数字）
-  - 中间：环境快照（左）+ 实时告警滚动（右，带状态指示灯）
+  - 中间：实时告警滚动（带状态指示灯）
   - 底部：告警趋势 / 能耗趋势 / 设备类型 / 告警分类 四张图表（深色主题适配）
 -->
 <template>
@@ -44,28 +44,9 @@
       </el-col>
     </el-row>
 
-    <!-- ============ 中间区域：环境 + 告警 ============ -->
+    <!-- ============ 中间区域：实时告警 ============ -->
     <el-row :gutter="12" class="mid-row">
-      <!-- 左侧：环境快照 -->
-      <el-col :xs="24" :md="10">
-        <div class="section-card">
-          <div class="section-title-bar">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-              <circle cx="12" cy="12" r="5"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/>
-            </svg>
-            <span>环境监测快照</span>
-          </div>
-          <div class="env-grid">
-            <div class="env-item" v-for="e in envItems" :key="e.key">
-              <span class="env-label">{{ e.label }}</span>
-              <span class="env-value" :style="{ color: e.color }">{{ envData[e.key] ?? '-' }}{{ e.unit }}</span>
-            </div>
-          </div>
-        </div>
-      </el-col>
-
-      <!-- 右侧：实时告警 -->
-      <el-col :xs="24" :md="14">
+      <el-col :span="24">
         <div class="section-card">
           <div class="section-title-bar">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
@@ -141,7 +122,6 @@ import {
   getDeviceTypeDist,
   getAlarmCategory,
   getLatestAlarm,
-  getLatestEnv
 } from '@/api/other'
 import { connectAlarmWS, onAlarmMessage, disconnectAlarmWS } from '@/api/ws'
 
@@ -207,27 +187,6 @@ async function loadOverview() {
   try {
     const res = await getOverview()
     Object.assign(overview, res.data || {})
-  } catch (e) { /* 静默 */ }
-}
-
-/* ---------------- 环境快照 ---------------- */
-
-const envItems = [
-  { key: 'temperature', label: '温度', unit: '℃', color: '#e6a23c' },
-  { key: 'humidity', label: '湿度', unit: '%', color: '#409eff' },
-  { key: 'pm25', label: 'PM2.5', unit: '', color: '#67c23a' },
-  { key: 'noise', label: '噪声', unit: 'dB', color: '#f56c6c' }
-]
-const envData = reactive({ temperature: '-', humidity: '-', pm25: '-', noise: '-' })
-
-async function loadLatestEnv() {
-  try {
-    const res = await getLatestEnv()
-    if (res.data) {
-      Object.keys(envData).forEach(k => {
-        envData[k] = res.data[k] != null ? res.data[k] : '-'
-      })
-    }
   } catch (e) { /* 静默 */ }
 }
 
@@ -406,7 +365,6 @@ function startPolling() {
   pollTimer = setInterval(() => {
     loadOverview()
     loadLatestAlarm()
-    loadLatestEnv()
   }, 30000)
 }
 
@@ -428,8 +386,7 @@ onMounted(async () => {
     loadEnergyTrend(),
     loadDeviceTypeDist(),
     loadAlarmCategory(),
-    loadLatestAlarm(),
-    loadLatestEnv()
+    loadLatestAlarm()
   ])
 
   loadAlarmTrend()
@@ -648,40 +605,9 @@ onUnmounted(() => {
 .section-title-bar svg {
   flex-shrink: 0;
 }
-.section-card .env-grid,
 .section-card .alarm-scroll {
   flex: 1;
   padding: 12px 16px;
-}
-
-/* 环境网格 */
-.env-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 12px;
-  align-content: center;
-  height: 100%;
-  padding: 0;
-}
-.env-item {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  background: rgba(255,255,255,0.04);
-  border-radius: 8px;
-  border: 1px solid rgba(255,255,255,0.05);
-  padding: 16px 8px;
-}
-.env-label {
-  font-size: 12px;
-  color: rgba(200,214,229,0.5);
-  margin-bottom: 6px;
-}
-.env-value {
-  font-size: 24px;
-  font-weight: 700;
-  font-family: 'Courier New', monospace;
 }
 
 /* 告警列表 */

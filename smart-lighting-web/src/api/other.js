@@ -87,6 +87,10 @@ export function updateCamera(data) {
 export function deleteCamera(id) {
   return request({ url: `/video/camera/${id}`, method: 'delete' })
 }
+// 获取摄像头抓拍图（RTSP 等无法直连时的后端兜底，返回 blob）
+export function getSnapshot(id) {
+  return request({ url: `/video/camera/${id}/snapshot`, method: 'get', responseType: 'blob' })
+}
 
 // ========== 环境监测 ==========
 export function pageEnv(params) {
@@ -141,11 +145,14 @@ export function addWorkOrder(data) {
 export function assignWorkOrder(id, params) {
   return request({ url: `/workorder/assign/${id}`, method: 'put', params })
 }
-export function handleWorkOrder(id) {
-  return request({ url: `/workorder/handle/${id}`, method: 'put' })
+export function handleWorkOrder(id, params) {
+  return request({ url: `/workorder/handle/${id}`, method: 'put', params })
 }
 export function finishWorkOrder(id) {
   return request({ url: `/workorder/finish/${id}`, method: 'put' })
+}
+export function getWorkOrderByAlarm(alarmId) {
+  return request({ url: `/workorder/by-alarm/${alarmId}`, method: 'get' })
 }
 
 // ========== 系统管理 ==========
