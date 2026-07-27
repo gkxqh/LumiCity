@@ -89,7 +89,7 @@
     <el-dialog
       v-model="previewVisible"
       :title="`视频预览 - ${previewRow.cameraName}`"
-      width="880px"
+      width="min(92vw, 1000px)"
       @closed="stopPlay"
     >
       <!-- 工具条 -->
@@ -152,15 +152,6 @@
           :style="mediaStyle"
           alt="摄像头离线"
         />
-
-        <!-- RTSP：浏览器无法直连的提示 -->
-        <div v-else-if="playMode === 'rtsp'" class="player-tip">
-          <el-icon :size="48" color="#e6a23c"><WarningFilled /></el-icon>
-          <div class="tip-title">该摄像头为 RTSP 流，浏览器无法直接播放</div>
-          <div class="tip-sub">
-            需经流媒体网关（如 ZLMediaKit / SRS）转封装为 HLS / WebRTC 后，将 streamUrl 指向网关地址即可在此播放。
-          </div>
-        </div>
 
         <!-- 故障：红色遮罩 -->
         <div v-else-if="playMode === 'fault'" class="player-fault">
@@ -248,7 +239,7 @@ import {
   Search, Refresh, Plus, Edit, Delete, VideoPlay,
   Camera, FullScreen, WarningFilled, ArrowLeft, ArrowRight
 } from '@element-plus/icons-vue'
-import { pageCamera, addCamera, updateCamera, deleteCamera } from '@/api/other'
+import { pageCamera, addCamera, updateCamera, deleteCamera, getSnapshot } from '@/api/other'
 import { listPole } from '@/api/device'
 
 /* ---------------- 字典数据 ---------------- */
@@ -324,7 +315,8 @@ const previewRow = reactive({ id: null, cameraName: '', streamUrl: '', status: 1
 const playMode = ref('')        // live / snapshot / offline / rtsp / fault
 const streamType = ref('')      // hls / mp4 / mjpeg / image / rtsp / unknown
 const liveSrc = ref('')         // 直连流（video 或 img）
-const snapshotSrc = ref('')     // 快照轮询地址
+const snapshotSrc = ref('')     // 快照轮询地址（直连或后端抓拍）
+const snapshotSource = ref('')  // 'direct' 直连图片轮询 / 'backend' 后端 AWT 抓拍
 const staticOfflineSrc = ref('')// 离线静态图
 const recTime = ref('')         // CCTV 时间码
 const zoom = ref(1)             // 画面缩放
@@ -332,6 +324,7 @@ const playerWrap = ref(null)
 
 let snapshotTimer = null
 let clockTimer = null
+let backendSnapshotUrl = null   // 后端抓拍生成的 objectURL，需手动释放
 
 // 离线静态占位图（SVG data URI）：摄像头离线时展示，不尝试连接流
 const STATIC_OFFLINE_IMG =
@@ -363,9 +356,6 @@ function isSafari() {
   return /Safari/.test(ua) && !/Chrome/.test(ua)
 }
 const playerHint = computed(() => {
-  if (playMode.value === 'rtsp') {
-    return '当前为 RTSP 流，浏览器无法直接播放，需经流媒体网关转封装为 HLS / WebRTC 后接入。'
-  }
   if (playMode.value === 'live' && streamType.value === 'hls' && !isSafari()) {
     return '当前为 HLS 流，建议使用 Safari 或引入 hls.js 以获得最佳兼容。'
   }
@@ -390,6 +380,7 @@ function detectStreamType(url) {
 function stopPlay() {
   if (snapshotTimer) { clearInterval(snapshotTimer); snapshotTimer = null }
   if (clockTimer) { clearInterval(clockTimer); clockTimer = null }
+  if (backendSnapshotUrl) { URL.revokeObjectURL(backendSnapshotUrl); backendSnapshotUrl = null }
   liveSrc.value = ''
   snapshotSrc.value = ''
   staticOfflineSrc.value = ''
@@ -397,6 +388,7 @@ function stopPlay() {
   zoom.value = 1
   playMode.value = ''
   streamType.value = ''
+  snapshotSource.value = ''
 }
 
 // 启动 CCTV 时间码
@@ -408,10 +400,28 @@ function startClock() {
   clockTimer = setInterval(tick, 1000)
 }
 
-// 快照地址轮询（每秒刷新，加时间戳防缓存）
+// 快照地址轮询（每秒刷新，加时间戳防缓存）—— 直连公开图片/快照地址
 function startSnapshotLoop(url) {
   const tick = () => {
     snapshotSrc.value = url + (url.includes('?') ? '&' : '?') + '_t=' + Date.now()
+  }
+  tick()
+  snapshotTimer = setInterval(tick, 1000)
+}
+
+// 后端抓拍轮询（RTSP 等无法直连时的兜底）：每秒请求一张后端绘制的 JPEG
+async function startBackendSnapshotLoop(id) {
+  const tick = async () => {
+    try {
+      const blob = await getSnapshot(id)
+      const url = URL.createObjectURL(blob)
+      if (backendSnapshotUrl) URL.revokeObjectURL(backendSnapshotUrl)
+      backendSnapshotUrl = url
+      snapshotSrc.value = url
+    } catch (e) {
+      // 单帧失败忽略，下一秒重试；打印以便排查
+      console.warn('[snapshot] 获取抓拍帧失败：', e?.message || e)
+    }
   }
   tick()
   snapshotTimer = setInterval(tick, 1000)
@@ -451,8 +461,10 @@ function startPlay(row) {
   startClock()
 
   if (type === 'rtsp') {
-    // 浏览器原生不支持 RTSP，需网关转封装
-    playMode.value = 'rtsp'
+    // 浏览器原生不支持 RTSP：回退到后端实时抓拍图（AWT 绘制）轮询，模拟实时监控画面
+    playMode.value = 'snapshot'
+    snapshotSource.value = 'backend'
+    startBackendSnapshotLoop(row.id)
     return
   }
   if (type === 'mjpeg' || type === 'hls' || type === 'mp4') {
@@ -464,6 +476,7 @@ function startPlay(row) {
   if (type === 'image') {
     // 静态快照地址：轮询刷新模拟实时
     playMode.value = 'snapshot'
+    snapshotSource.value = 'direct'
     startSnapshotLoop(row.streamUrl)
     return
   }
@@ -682,11 +695,18 @@ onMounted(() => {
   justify-content: center;
 }
 .player-media {
-  max-width: 100%;
-  max-height: 100%;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
   transform-origin: center center;
+  background: #000;
 }
-.player-tip,
+/* 全屏时铺满视口 */
+.player-wrap:fullscreen {
+  width: 100vw;
+  height: 100vh;
+  border-radius: 0;
+}
 .player-fault {
   position: absolute;
   inset: 0;
@@ -698,22 +718,6 @@ onMounted(() => {
   padding: 24px;
   text-align: center;
   color: #fff;
-}
-.player-tip {
-  background: rgba(20, 20, 20, 0.85);
-}
-.player-tip .tip-title {
-  font-size: 17px;
-  font-weight: 600;
-  color: #e6a23c;
-}
-.player-tip .tip-sub {
-  font-size: 13px;
-  color: #cfcfcf;
-  max-width: 520px;
-  line-height: 1.6;
-}
-.player-fault {
   background: rgba(20, 20, 20, 0.72);
 }
 .player-fault .fault-title {
