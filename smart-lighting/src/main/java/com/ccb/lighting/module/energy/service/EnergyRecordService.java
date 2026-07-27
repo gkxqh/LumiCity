@@ -3,6 +3,7 @@ package com.ccb.lighting.module.energy.service;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.ccb.lighting.common.PageQuery;
 import com.ccb.lighting.module.energy.entity.EnergyRecord;
+import jakarta.servlet.http.HttpServletResponse;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -68,11 +69,6 @@ public interface EnergyRecordService {
     /**
      * 导出能耗报表
      *
-     * @param outputStream 输出流
-     * @param deviceId     设备ID（可选，为空则导出全部）
-     * @param startTime    开始时间（可选）
-     * @param endTime      结束时间（可选）
      */
-    void exportReport(java.io.OutputStream outputStream, String deviceId, 
-                      java.time.LocalDateTime startTime, java.time.LocalDateTime endTime);
+    void exportReport(HttpServletResponse response, String filename,String deviceId);
 }
