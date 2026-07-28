@@ -20,7 +20,7 @@ import java.util.Map;
  * <p>控制链路：
  * 1. 查询灯杆信息，校验是否存在
  * 2. 检查在线状态：离线设备直接跳过，不执行任何操作
- * 3. 模拟通信：sleep(300~800ms)，95%成功率模拟真实设备通信
+ * 3. 模拟通信：100%成功率（简化模拟，实际生产环境替换为真实设备通信）
  * 4. 写入数据库：更新 light_status / light_brightness
  * 5. 记录指令日志：入库 light_command_log 作为审计追溯</p>
  */
@@ -53,8 +53,8 @@ public class LightControlServiceImpl implements LightControlService {
      * @return true=通信成功 false=通信失败
      */
     private boolean simulateCommunication() {
-        // 模拟网络环境：95% 成功率
-        return Math.random() < 0.95;
+        // 模拟网络环境：100% 成功率
+        return true;
     }
 
     /**
