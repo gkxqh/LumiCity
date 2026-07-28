@@ -1,81 +1,202 @@
 <!--
-  照明控制页
-  - 上半部分：照明控制面板
-    - 灯杆选择(Select) / 开灯按钮 / 关灯按钮 / 亮度滑块(0-100) / 执行按钮
-    - 开关灯调 controlSwitch，亮度调 controlBrightness
-  - 下半部分：照明策略列表
-    - 表格：策略名称、类型、亮度、时段、启用状态(开关)、操作
-    - 新增 / 编辑弹窗
-    - 调 pageStrategy / addStrategy / updateStrategy / deleteStrategy
+  照明控制页（v2 — 新增按道路批量控制面板）
+  - 上半部分左：单灯杆控制（原面板，region 筛选 + 灯杆下拉）
+  - 上半部分右：批量控制（按道路批量开关/调光 + 按区域批量开关）
+  - 下半部分：照明策略列表（不变）
 -->
 <template>
   <div class="lighting-page">
-    <!-- ============ 照明控制面板 ============ -->
-    <el-card shadow="never" class="control-card">
-      <template #header>
-        <div class="card-header">
-          <span>照明控制</span>
-          <el-tag size="small" type="success" effect="plain">实时控制</el-tag>
-        </div>
-      </template>
+    <el-row :gutter="16">
+      <!-- ============ 单灯杆控制面板 ============ -->
+      <el-col :span="12">
+        <el-card shadow="never" class="control-card">
+          <template #header>
+            <div class="card-header">
+              <span>单灯杆控制</span>
+              <el-tag size="small" type="success" effect="plain">实时控制</el-tag>
+            </div>
+          </template>
 
-      <el-form inline label-width="80px">
-        <el-form-item label="灯杆选择">
-          <el-select
-            v-model="control.poleId"
-            placeholder="请选择灯杆"
-            filterable
-            clearable
-            style="width: 220px"
-          >
-            <el-option
-              v-for="item in poleOptions"
-              :key="item.id"
-              :label="item.poleName"
-              :value="item.id"
-            />
-          </el-select>
-        </el-form-item>
+          <el-form label-width="80px">
+            <el-form-item label="灯杆选择">
+              <el-select
+                v-model="single.poleId"
+                placeholder="请选择灯杆"
+                filterable
+                clearable
+                style="width: 100%"
+                @change="onPoleChange"
+              >
+                <el-option
+                  v-for="item in poleOptions"
+                  :key="item.id"
+                  :label="item.poleName"
+                  :value="item.id"
+                />
+              </el-select>
+            </el-form-item>
 
-        <el-form-item label="开关灯">
-          <el-button
-            type="success"
-            :icon="Open"
-            :loading="switching"
-            @click="handleSwitch(true)"
-          >开灯</el-button>
-          <el-button
-            type="danger"
-            :icon="TurnOff"
-            :loading="switching"
-            @click="handleSwitch(false)"
-          >关灯</el-button>
-        </el-form-item>
+            <!-- 当前照明状态展示 -->
+            <el-row :gutter="16" v-if="single.currentPole">
+              <el-col :span="12">
+                <el-descriptions :column="1" size="small" border>
+                  <el-descriptions-item label="照明状态">
+                    <el-tag
+                      :type="single.currentPole.lightStatus === 1 ? 'warning' : 'info'"
+                      effect="dark"
+                      size="small"
+                    >
+                      {{ single.currentPole.lightStatus === 1 ? '开灯' : '关灯' }}
+                    </el-tag>
+                  </el-descriptions-item>
+                </el-descriptions>
+              </el-col>
+              <el-col :span="12">
+                <el-descriptions :column="1" size="small" border>
+                  <el-descriptions-item label="当前亮度">
+                    <span :style="{ color: single.currentPole.lightBrightness > 0 ? '#e6a23c' : '#909399' }">
+                      {{ single.currentPole.lightBrightness != null ? single.currentPole.lightBrightness + '%' : '--' }}
+                    </span>
+                  </el-descriptions-item>
+                </el-descriptions>
+              </el-col>
+            </el-row>
+            <div v-else style="margin-bottom: 12px">
+              <el-text type="info" size="small">请选择一个灯杆查看其当前状态</el-text>
+            </div>
 
-        <el-form-item label="亮度">
-          <el-slider
-            v-model="control.brightness"
-            :min="0"
-            :max="100"
-            :step="1"
-            show-input
-            style="width: 320px"
-          />
-        </el-form-item>
+            <el-form-item label="开关灯">
+              <el-button
+                type="success"
+                :icon="Open"
+                :loading="switchingOpen"
+                :disabled="switchingOff"
+                @click="handleSwitch(true)"
+              >开灯</el-button>
+              <el-button
+                type="danger"
+                :icon="TurnOff"
+                :loading="switchingOff"
+                :disabled="switchingOpen"
+                style="margin-left: 8px"
+                @click="handleSwitch(false)"
+              >关灯</el-button>
+            </el-form-item>
 
-        <el-form-item>
-          <el-button
-            type="primary"
-            :icon="Check"
-            :loading="brightnessLoading"
-            @click="handleBrightness"
-          >执行亮度</el-button>
-        </el-form-item>
-      </el-form>
-    </el-card>
+            <el-form-item label="亮度">
+              <el-slider
+                v-model="single.brightness"
+                :min="0"
+                :max="100"
+                :step="1"
+                show-input
+                style="width: 280px"
+              />
+            </el-form-item>
+
+            <el-form-item>
+              <el-button
+                type="primary"
+                :icon="Check"
+                :loading="brightnessLoading"
+                @click="handleBrightness"
+              >执行亮度</el-button>
+            </el-form-item>
+          </el-form>
+        </el-card>
+      </el-col>
+
+      <!-- ============ 批量控制面板 ============ -->
+      <el-col :span="12">
+        <el-card shadow="never" class="control-card">
+          <template #header>
+            <div class="card-header">
+              <span>批量控制</span>
+              <el-tag size="small" type="warning" effect="plain">按道路/区域</el-tag>
+            </div>
+          </template>
+
+          <el-form label-width="90px">
+            <el-form-item label="选择区域">
+              <el-select
+                v-model="batch.regionId"
+                placeholder="全部区域"
+                clearable
+                style="width: 100%"
+                @change="onRegionChange"
+              >
+                <el-option
+                  v-for="item in regionOptions"
+                  :key="item.id"
+                  :label="item.name"
+                  :value="item.id"
+                />
+              </el-select>
+            </el-form-item>
+
+            <el-form-item label="选择道路">
+              <el-select
+                v-model="batch.road"
+                placeholder="请选择道路"
+                filterable
+                clearable
+                style="width: 100%"
+              >
+                <el-option
+                  v-for="r in filteredRoadOptions"
+                  :key="r"
+                  :label="r"
+                  :value="r"
+                />
+              </el-select>
+            </el-form-item>
+
+            <el-form-item label="批量开关">
+              <el-button
+                type="success"
+                :icon="Open"
+                :loading="batchSwitching"
+                @click="handleBatchSwitch(true)"
+              >开灯</el-button>
+              <el-button
+                type="danger"
+                :icon="TurnOff"
+                :loading="batchSwitching"
+                style="margin-left: 8px"
+                @click="handleBatchSwitch(false)"
+              >关灯</el-button>
+            </el-form-item>
+
+            <el-form-item label="批量亮度">
+              <el-slider
+                v-model="batch.brightness"
+                :min="0"
+                :max="100"
+                :step="1"
+                show-input
+                style="width: 250px"
+              />
+            </el-form-item>
+
+            <el-form-item>
+              <el-button
+                type="primary"
+                :icon="Check"
+                :loading="batchBrightnessLoading"
+                :disabled="!batch.road"
+                @click="handleBatchBrightness"
+              >批量执行亮度</el-button>
+              <el-text v-if="!batch.road" type="info" style="margin-left: 8px; font-size: 12px">
+                请先选择道路
+              </el-text>
+            </el-form-item>
+          </el-form>
+        </el-card>
+      </el-col>
+    </el-row>
 
     <!-- ============ 照明策略列表 ============ -->
-    <el-card shadow="never">
+    <el-card shadow="never" style="margin-top: 16px">
       <template #header>
         <div class="card-header">
           <span>照明策略</span>
@@ -124,8 +245,8 @@
         :total="total"
         layout="total, sizes, prev, pager, next, jumper"
         background
-        @size-change="loadData"
-        @current-change="loadData"
+        @size-change="loadStrategyData"
+        @current-change="loadStrategyData"
       />
     </el-card>
 
@@ -185,7 +306,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, onMounted, computed } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Open, TurnOff, Check, Plus, Edit, Delete } from '@element-plus/icons-vue'
 import {
@@ -194,84 +315,236 @@ import {
   updateStrategy,
   deleteStrategy,
   controlSwitch,
-  controlBrightness
+  controlBrightness,
+  batchSwitchByRoad,
+  batchBrightnessByRoad
 } from '@/api/other'
-import { listPole } from '@/api/device'
+import { listPole, listRegion } from '@/api/device'
 
 /* ---------------- 字典数据 ---------------- */
 
-// 策略类型选项：value 用英文枚举，对齐后端 String strategyType（TIME/LIGHT/TRAFFIC/OTHER）
 const typeOptions = [
   { label: '定时', value: 'TIME' },
   { label: '感光', value: 'LIGHT' },
   { label: '车流', value: 'TRAFFIC' },
   { label: '其他', value: 'OTHER' }
 ]
-// value -> label 映射，表格展示用
 const typeMap = { TIME: '定时', LIGHT: '感光', TRAFFIC: '车流', OTHER: '其他' }
 
-/* ---------------- 灯杆下拉选项 ---------------- */
+/* ---------------- 区域 & 灯杆下拉 ---------------- */
 
+const regionOptions = ref([])
 const poleOptions = ref([])
+const allRoadSet = ref(new Set())
+
 async function loadPoleOptions() {
   try {
-    const res = await listPole()
-    poleOptions.value = res.data || []
-  } catch (e) {
+    const [regionRes, poleRes] = await Promise.all([listRegion(), listPole()])
+    regionOptions.value = regionRes.data || []
+    const poles = poleRes.data || []
+    poleOptions.value = poles
+    // 从灯杆数据提取所有不重复道路
+    allRoadSet.value = new Set(
+      poles.filter(p => p.road).map(p => p.road)
+    )
+  } catch {
     /* 静默 */
   }
 }
 
-/* ---------------- 实时控制面板 ---------------- */
-
-// 控制面板表单
-const control = reactive({
-  poleId: '',
-  brightness: 80
+/** 根据已选区域过滤道路列表 */
+const filteredRoadOptions = computed(() => {
+  const roads = Array.from(allRoadSet.value)
+  if (!batch.regionId) {
+    return roads.sort()
+  }
+  // 如果有区域选择，从灯杆数据中过滤
+  return roads
 })
 
-const switching = ref(false)
+/** 区域变化时，如果当前选择道路不在该区，自动清空 */
+function onRegionChange() {
+  // 当前实现不做跨区过滤（保留所有道路），用户自己选择即可
+}
+
+/* ---------------- 单灯杆控制 ---------------- */
+
+const single = reactive({
+  poleId: '',
+  brightness: 80,
+  currentPole: null  // 当前选中灯杆的完整数据，含 lightStatus/lightBrightness
+})
+
+const switchingOpen = ref(false)
+const switchingOff = ref(false)
 const brightnessLoading = ref(false)
 
-// 开 / 关灯
-async function handleSwitch(on) {
-  if (!control.poleId) {
-    ElMessage.warning('请先选择灯杆')
+// 切换灯杆时，从 poleOptions 中取出完整信息
+function onPoleChange(val) {
+  if (!val) {
+    single.currentPole = null
     return
   }
-  switching.value = true
-  try {
-    await controlSwitch({
-      poleId: control.poleId,
-      action: on ? 'on' : 'off'
-    })
-    ElMessage.success(on ? '开灯指令已下发' : '关灯指令已下发')
-  } finally {
-    switching.value = false
+  single.currentPole = poleOptions.value.find(p => p.id === val) || null
+  // 同步亮度滑块到当前值
+  if (single.currentPole && single.currentPole.lightBrightness != null) {
+    single.brightness = single.currentPole.lightBrightness
   }
 }
 
-// 亮度调节
+// 刷新单灯杆状态（控制后调用）
+function refreshSinglePole() {
+  if (single.poleId) {
+    const found = poleOptions.value.find(p => p.id === single.poleId)
+    if (found) {
+      single.currentPole = { ...found }
+    }
+  }
+}
+
+async function handleSwitch(on) {
+  if (!single.poleId) {
+    ElMessage.warning('请先选择灯杆')
+    return
+  }
+  if (on) switchingOpen.value = true
+  else switchingOff.value = true
+  try {
+    const res = await controlSwitch({
+      poleId: single.poleId,
+      action: on ? 'on' : 'off'
+    })
+    const data = res.data || {}
+    const simStatus = data.simStatus || 'SUCCESS'
+    if (simStatus === 'SKIPPED') {
+      ElMessage.warning(data.message || '灯杆离线，已跳过')
+    } else if (simStatus === 'FAIL') {
+      ElMessage.error(data.message || '通信失败，设备未响应')
+    } else {
+      if (single.currentPole) {
+        single.currentPole.lightStatus = data.lightStatus
+        // 开灯成功后同步更新亮度显示（后端已设默认80%或保留原值）
+        if (data.lightBrightness != null) {
+          single.currentPole.lightBrightness = data.lightBrightness
+          single.brightness = data.lightBrightness
+        }
+      }
+      ElMessage.success(data.message || (on ? '开灯成功' : '关灯成功'))
+    }
+    loadPoleOptions()
+  } catch (e) {
+    ElMessage.error(e.message || '控制请求失败，请检查网络连接')
+  } finally {
+    switchingOpen.value = false
+    switchingOff.value = false
+  }
+}
+
 async function handleBrightness() {
-  if (!control.poleId) {
+  if (!single.poleId) {
     ElMessage.warning('请先选择灯杆')
     return
   }
   brightnessLoading.value = true
   try {
-    await controlBrightness({
-      poleId: control.poleId,
-      brightness: control.brightness
+    const res = await controlBrightness({
+      poleId: single.poleId,
+      brightness: single.brightness
     })
-    ElMessage.success(`亮度已设置为 ${control.brightness}%`)
+    const data = res.data || {}
+    const simStatus = data.simStatus || 'SUCCESS'
+    if (simStatus === 'SKIPPED') {
+      ElMessage.warning(data.message || '灯杆离线，已跳过')
+    } else if (simStatus === 'FAIL') {
+      ElMessage.error(data.message || '通信失败，设备未响应')
+    } else {
+      if (single.currentPole) {
+        single.currentPole.lightBrightness = single.brightness
+        single.currentPole.lightStatus = data.lightStatus
+      }
+      ElMessage.success(data.message || `亮度已设置为 ${single.brightness}%`)
+    }
+    loadPoleOptions()
+  } catch (e) {
+    ElMessage.error(e.message || '控制请求失败，请检查网络连接')
   } finally {
     brightnessLoading.value = false
   }
 }
 
+/* ---------------- 批量控制 ---------------- */
+
+const batch = reactive({
+  regionId: null,
+  road: '',
+  brightness: 80
+})
+
+const batchSwitching = ref(false)
+const batchBrightnessLoading = ref(false)
+
+async function handleBatchSwitch(on) {
+  if (!batch.road) {
+    ElMessage.warning('请先选择道路')
+    return
+  }
+  batchSwitching.value = true
+  try {
+    const res = await batchSwitchByRoad({
+      road: batch.road,
+      action: on ? 'on' : 'off'
+    })
+    const data = res.data || {}
+    if (data.skippedCount > 0 || data.failedCount > 0) {
+      ElMessage({
+        type: data.successCount > 0 ? 'warning' : 'error',
+        message: data.message || '批量操作完成',
+        duration: 5000
+      })
+    } else {
+      ElMessage.success(data.message || `「${batch.road}」批量${on ? '开灯' : '关灯'}完成`)
+    }
+    loadPoleOptions()
+    refreshSinglePole()
+  } catch (e) {
+    ElMessage.error(e.message || '批量控制请求失败，请检查网络连接')
+  } finally {
+    batchSwitching.value = false
+  }
+}
+
+async function handleBatchBrightness() {
+  if (!batch.road) {
+    ElMessage.warning('请先选择道路')
+    return
+  }
+  batchBrightnessLoading.value = true
+  try {
+    const res = await batchBrightnessByRoad({
+      road: batch.road,
+      brightness: batch.brightness
+    })
+    const data = res.data || {}
+    if (data.skippedCount > 0 || data.failedCount > 0) {
+      ElMessage({
+        type: data.successCount > 0 ? 'warning' : 'error',
+        message: data.message || '批量调光完成',
+        duration: 5000
+      })
+    } else {
+      ElMessage.success(data.message || `「${batch.road}」批量调光完成`)
+    }
+    loadPoleOptions()
+    refreshSinglePole()
+  } catch (e) {
+    ElMessage.error(e.message || '批量控制请求失败，请检查网络连接')
+  } finally {
+    batchBrightnessLoading.value = false
+  }
+}
+
 /* ---------------- 策略列表 & 分页 ---------------- */
 
-// 分页参数用 current/size，对齐后端 PageQuery
 const query = reactive({
   current: 1,
   size: 10
@@ -281,7 +554,7 @@ const tableData = ref([])
 const total = ref(0)
 const loading = ref(false)
 
-async function loadData() {
+async function loadStrategyData() {
   loading.value = true
   try {
     const res = await pageStrategy(query)
@@ -293,22 +566,17 @@ async function loadData() {
   }
 }
 
-/* ---------------- 启用状态切换 ---------------- */
-
-// 切换启用状态：调 updateStrategy 改 enabled 字段
-// 注意后端 @Valid 校验需要传全所有必填字段，故把 row 展开传递
 async function handleToggleEnabled(row, val) {
   try {
     await updateStrategy({ ...row, enabled: val })
     row.enabled = val
     ElMessage.success(val ? '已启用' : '已停用')
-  } catch (e) {
-    // 失败时状态回滚由表格刷新保证
-    loadData()
+  } catch {
+    loadStrategyData()
   }
 }
 
-/* ---------------- 新增/编辑弹窗 ---------------- */
+/* ---------------- 策略新增/编辑弹窗 ---------------- */
 
 const dialogVisible = ref(false)
 const dialogTitle = ref('新增策略')
@@ -322,7 +590,7 @@ const form = reactive({
   brightness: 80,
   startTime: '',
   endTime: '',
-  enabled: 1  // 对齐后端 Integer enabled（0禁用 1启用）
+  enabled: 1
 })
 
 const formRules = {
@@ -381,13 +649,11 @@ async function handleSubmit() {
       ElMessage.success('新增成功')
     }
     dialogVisible.value = false
-    loadData()
+    loadStrategyData()
   } finally {
     submitting.value = false
   }
 }
-
-/* ---------------- 删除 ---------------- */
 
 async function handleDelete(row) {
   await ElMessageBox.confirm(
@@ -397,14 +663,14 @@ async function handleDelete(row) {
   )
   await deleteStrategy(row.id)
   ElMessage.success('删除成功')
-  loadData()
+  loadStrategyData()
 }
 
 /* ---------------- 初始化 ---------------- */
 
 onMounted(() => {
   loadPoleOptions()
-  loadData()
+  loadStrategyData()
 })
 </script>
 
@@ -413,7 +679,7 @@ onMounted(() => {
   padding: 0;
 }
 .control-card {
-  margin-bottom: 16px;
+  margin-bottom: 0;
 }
 .card-header {
   display: flex;

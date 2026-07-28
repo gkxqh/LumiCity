@@ -1,14 +1,8 @@
 <!--
-  灯杆管理页（完整 CRUD）
-  - 顶部搜索栏：灯杆名称 / 灯杆编号 / 状态 / 查询 / 重置 / 新增
-  - 中间表格：灯杆编号、灯杆名称、地址、经度、纬度、状态、操作
-  - 底部分页
-  - 新增/编辑弹窗：灯杆编号、灯杆名称、地址、经度、纬度、状态
-
-  字段对齐后端 DevPole 实体：
-  - 经度 lng（BigDecimal）、纬度 lat（BigDecimal）
-  - status 是 Integer：0离线 1在线 2故障
-  - 分页参数 current/size（对齐 PageQuery）
+  灯杆管理页（v2 — region + road + number 拼接）
+  - 搜索栏：灯杆名称 / 灯杆编号 / 所属区域 / 道路 / 状态
+  - 表格：灯杆编号、灯杆名称、区域、道路、编号、经纬度、状态
+  - pole_name 和 address 由后端自动拼接，前端不提供编辑入口
 -->
 <template>
   <div class="pole-page">
@@ -20,7 +14,7 @@
             v-model="query.poleName"
             placeholder="请输入灯杆名称"
             clearable
-            style="width: 180px"
+            style="width: 160px"
             @keyup.enter="handleSearch"
           />
         </el-form-item>
@@ -30,7 +24,33 @@
             v-model="query.poleCode"
             placeholder="请输入灯杆编号"
             clearable
-            style="width: 180px"
+            style="width: 140px"
+            @keyup.enter="handleSearch"
+          />
+        </el-form-item>
+
+        <el-form-item label="所属区域">
+          <el-select
+            v-model="query.regionId"
+            placeholder="全部"
+            clearable
+            style="width: 130px"
+          >
+            <el-option
+              v-for="item in regionOptions"
+              :key="item.id"
+              :label="item.name"
+              :value="item.id"
+            />
+          </el-select>
+        </el-form-item>
+
+        <el-form-item label="道路">
+          <el-input
+            v-model="query.road"
+            placeholder="按路名筛选"
+            clearable
+            style="width: 140px"
             @keyup.enter="handleSearch"
           />
         </el-form-item>
@@ -40,7 +60,7 @@
             v-model="query.status"
             placeholder="全部"
             clearable
-            style="width: 130px"
+            style="width: 110px"
           >
             <el-option
               v-for="item in statusOptions"
@@ -68,20 +88,36 @@
         stripe
         style="width: 100%"
       >
-        <el-table-column type="index" label="序号" width="60" align="center" />
-        <el-table-column prop="poleCode" label="灯杆编号" width="150" />
-        <el-table-column prop="poleName" label="灯杆名称" min-width="140" show-overflow-tooltip />
-        <el-table-column prop="address" label="地址" min-width="180" show-overflow-tooltip />
-        <el-table-column prop="lng" label="经度" width="120" align="center" />
-        <el-table-column prop="lat" label="纬度" width="120" align="center" />
-        <el-table-column prop="status" label="状态" width="90" align="center">
+        <el-table-column type="index" label="序号" width="55" align="center" />
+        <el-table-column prop="poleCode" label="灯杆编号" width="130" />
+        <el-table-column prop="poleName" label="灯杆名称" min-width="180" show-overflow-tooltip />
+        <el-table-column label="区域" width="100" align="center">
+          <template #default="{ row }">{{ row.regionName || '--' }}</template>
+        </el-table-column>
+        <el-table-column prop="road" label="道路" width="130" show-overflow-tooltip />
+        <el-table-column prop="number" label="编号" width="100" />
+        <el-table-column prop="lng" label="经度" width="110" align="center" />
+        <el-table-column prop="lat" label="纬度" width="110" align="center" />
+        <el-table-column prop="status" label="在线状态" width="80" align="center">
           <template #default="{ row }">
             <el-tag :type="statusTagType(row.status)" effect="light">
               {{ statusMap[row.status] || row.status }}
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="160" fixed="right" align="center">
+        <el-table-column label="照明状态" width="80" align="center">
+          <template #default="{ row }">
+            <el-tag :type="row.lightStatus === 1 ? 'warning' : 'info'" effect="dark">
+              {{ row.lightStatus === 1 ? '开灯' : '关灯' }}
+            </el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column label="当前亮度" width="80" align="center">
+          <template #default="{ row }">
+            <span>{{ row.lightBrightness != null ? row.lightBrightness + '%' : '--' }}</span>
+          </template>
+        </el-table-column>
+        <el-table-column label="操作" width="130" fixed="right" align="center">
           <template #default="{ row }">
             <el-button type="primary" link :icon="Edit" @click="openEdit(row)">编辑</el-button>
             <el-button type="danger" link :icon="Delete" @click="handleDelete(row)">删除</el-button>
@@ -107,7 +143,7 @@
     <el-dialog
       v-model="dialogVisible"
       :title="dialogTitle"
-      width="540px"
+      width="520px"
       @closed="resetForm"
     >
       <el-form
@@ -119,24 +155,39 @@
         <el-form-item label="灯杆编号" prop="poleCode">
           <el-input v-model="form.poleCode" placeholder="请输入灯杆编号" />
         </el-form-item>
-        <el-form-item label="灯杆名称" prop="poleName">
-          <el-input v-model="form.poleName" placeholder="请输入灯杆名称" />
+
+        <el-form-item label="所属区域" prop="regionId">
+          <el-select v-model="form.regionId" placeholder="请选择区域" style="width: 100%">
+            <el-option
+              v-for="item in regionOptions"
+              :key="item.id"
+              :label="item.name"
+              :value="item.id"
+            />
+          </el-select>
         </el-form-item>
-        <el-form-item label="地址" prop="address">
-          <el-input v-model="form.address" placeholder="请输入地址" />
+
+        <el-form-item label="道路名称" prop="road">
+          <el-input v-model="form.road" placeholder="如：科华北路、天府大道" />
         </el-form-item>
+
+        <el-form-item label="编号" prop="number">
+          <el-input v-model="form.number" placeholder="如：88号、29号院" />
+        </el-form-item>
+
         <el-row :gutter="16">
           <el-col :span="12">
             <el-form-item label="经度" prop="lng">
-              <el-input v-model="form.lng" placeholder="如 116.404" />
+              <el-input v-model="form.lng" placeholder="如 104.05" />
             </el-form-item>
           </el-col>
           <el-col :span="12">
             <el-form-item label="纬度" prop="lat">
-              <el-input v-model="form.lat" placeholder="如 39.915" />
+              <el-input v-model="form.lat" placeholder="如 30.63" />
             </el-form-item>
           </el-col>
         </el-row>
+
         <el-form-item label="状态" prop="status">
           <el-select v-model="form.status" placeholder="请选择状态" style="width: 100%">
             <el-option
@@ -146,6 +197,11 @@
               :value="item.value"
             />
           </el-select>
+        </el-form-item>
+
+        <!-- 提示：pole_name 和 address 由后端自动拼接 -->
+        <el-form-item label=" ">
+          <el-text type="info" size="small">灯杆名称和地址由「区域 + 道路 + 编号」自动生成</el-text>
         </el-form-item>
       </el-form>
 
@@ -165,34 +221,46 @@ import {
   pagePole,
   addPole,
   updatePole,
-  deletePole
+  deletePole,
+  listRegion
 } from '@/api/device'
 
 /* ---------------- 字典数据 ---------------- */
 
-// 状态选项：value 用数字，对齐后端 Integer status（0离线 1在线 2故障）
 const statusOptions = [
   { label: '在线', value: 1 },
   { label: '离线', value: 0 },
   { label: '故障', value: 2 }
 ]
 
-// 状态值 → 中文显示（key 是数字）
 const statusMap = { 0: '离线', 1: '在线', 2: '故障' }
 
-// 状态对应的 Tag 颜色：在线-绿、离线-灰、故障-红
 function statusTagType(status) {
   return { 1: 'success', 0: 'info', 2: 'danger' }[status] || 'info'
 }
 
+/* ---------------- 区域选项 ---------------- */
+
+const regionOptions = ref([])
+
+async function loadRegionOptions() {
+  try {
+    const res = await listRegion()
+    regionOptions.value = res.data || []
+  } catch {
+    regionOptions.value = []
+  }
+}
+
 /* ---------------- 查询 & 表格 ---------------- */
 
-// 查询条件：分页参数用 current/size，对齐后端 PageQuery
 const query = reactive({
   current: 1,
   size: 10,
   poleName: '',
   poleCode: '',
+  regionId: null,
+  road: '',
   status: null
 })
 
@@ -200,12 +268,10 @@ const tableData = ref([])
 const total = ref(0)
 const loading = ref(false)
 
-// 加载灯杆分页数据
 async function loadData() {
   loading.value = true
   try {
     const res = await pagePole(query)
-    // 兼容 MyBatis-Plus(records) 与 PageHelper(list) 两种返回结构
     const page = res.data || {}
     tableData.value = page.records || page.list || []
     total.value = page.total || 0
@@ -214,16 +280,16 @@ async function loadData() {
   }
 }
 
-// 点击查询：回到第一页后重新加载
 function handleSearch() {
   query.current = 1
   loadData()
 }
 
-// 重置查询条件
 function handleReset() {
   query.poleName = ''
   query.poleCode = ''
+  query.regionId = null
+  query.road = ''
   query.status = null
   query.current = 1
   loadData()
@@ -236,18 +302,17 @@ const dialogTitle = ref('新增灯杆')
 const submitting = ref(false)
 const formRef = ref()
 
-// 弹窗表单数据：字段名对齐后端 DevPole 实体
 const form = reactive({
   id: null,
   poleCode: '',
-  poleName: '',
-  address: '',
+  regionId: null,
+  road: '',
+  number: '',
   lng: '',
   lat: '',
   status: null
 })
 
-// 经纬度数字校验：允许小数
 const numberValidator = (rule, value, callback) => {
   if (value === '' || value === null || value === undefined) {
     callback(new Error('请输入数值'))
@@ -260,44 +325,42 @@ const numberValidator = (rule, value, callback) => {
   callback()
 }
 
-// 弹窗表单校验规则
 const formRules = {
   poleCode: [{ required: true, message: '请输入灯杆编号', trigger: 'blur' }],
-  poleName: [{ required: true, message: '请输入灯杆名称', trigger: 'blur' }],
-  address: [{ required: true, message: '请输入地址', trigger: 'blur' }],
+  regionId: [{ required: true, message: '请选择所属区域', trigger: 'change' }],
+  road: [{ required: true, message: '请输入道路名称', trigger: 'blur' }],
   lng: [{ required: true, validator: numberValidator, trigger: 'blur' }],
   lat: [{ required: true, validator: numberValidator, trigger: 'blur' }],
   status: [{ required: true, message: '请选择状态', trigger: 'change' }]
 }
 
-// 重置表单（弹窗关闭时触发）
 function resetForm() {
   form.id = null
   form.poleCode = ''
-  form.poleName = ''
-  form.address = ''
+  form.regionId = null
+  form.road = ''
+  form.number = ''
   form.lng = ''
   form.lat = ''
   form.status = null
   formRef.value?.clearValidate()
 }
 
-// 打开新增弹窗
 function openAdd() {
   dialogTitle.value = '新增灯杆'
   resetForm()
   dialogVisible.value = true
 }
 
-// 打开编辑弹窗：把当前行数据回填到表单
 function openEdit(row) {
   dialogTitle.value = '编辑灯杆'
   resetForm()
   Object.assign(form, {
     id: row.id,
     poleCode: row.poleCode,
-    poleName: row.poleName,
-    address: row.address,
+    regionId: row.regionId,
+    road: row.road,
+    number: row.number || '',
     lng: row.lng,
     lat: row.lat,
     status: row.status
@@ -305,15 +368,12 @@ function openEdit(row) {
   dialogVisible.value = true
 }
 
-// 提交新增/编辑
 async function handleSubmit() {
-  // 1. 表单校验
   try {
     await formRef.value.validate()
   } catch {
     return
   }
-  // 2. 根据 id 判断新增还是修改；提交时把经纬度转成数字
   submitting.value = true
   try {
     const payload = {
@@ -338,7 +398,6 @@ async function handleSubmit() {
 /* ---------------- 删除 ---------------- */
 
 async function handleDelete(row) {
-  // 二次确认
   await ElMessageBox.confirm(
     `确定删除灯杆「${row.poleName}」吗？`,
     '提示',
@@ -352,6 +411,7 @@ async function handleDelete(row) {
 /* ---------------- 初始化 ---------------- */
 
 onMounted(() => {
+  loadRegionOptions()
   loadData()
 })
 </script>
