@@ -46,6 +46,30 @@
       </div>
     </div>
 
+    <!-- 待处理工单 -->
+    <div class="section-label">🛠️ 待处理工单</div>
+    <div class="glass-card wo-section">
+      <van-empty v-if="workOrders.length === 0" description="暂无工单" />
+      <div v-else>
+        <div
+          class="wo-item"
+          :class="'wo-item--' + (w.priority ?? 3)"
+          v-for="w in workOrders"
+          :key="w.id"
+          @click="router.push('/workorder')"
+        >
+          <div class="wo-dot" :class="'wo-dot--' + (w.priority ?? 3)"></div>
+          <div class="wo-info">
+            <div class="wo-title">{{ w.title || '未命名工单' }}</div>
+            <div class="wo-time">{{ w.createTime }}</div>
+          </div>
+          <van-tag round plain class="wo-tag" :class="'wo-p-' + (w.priority ?? 3)">
+            {{ priorityMap[w.priority] || '低' }}优先级
+          </van-tag>
+        </div>
+      </div>
+    </div>
+
     <!-- 快速入口 -->
     <div class="section-label">🔧 快速入口</div>
     <div class="quick-grid">
@@ -127,9 +151,10 @@ import { useUserStore } from '@/store/user'
 import { showToast, showSuccessToast, showConfirmDialog } from 'vant'
 import {
   getOverview,
-  getLatestAlarm,
+  pageAlarm,
   handleAlarm as handleAlarmApi,
-  listUsersByRole
+  listUsersByRole,
+  pageWorkOrder
 } from '@/api/other'
 
 const router = useRouter()
@@ -149,6 +174,9 @@ async function doLogout() {
 
 const stats = ref([])
 const alarms = ref([])
+const workOrders = ref([])
+// 工单优先级字典（与工单页一致）：1高 / 2中 / 3低
+const priorityMap = { 1: '高', 2: '中', 3: '低' }
 let timer = null
 
 function severityClass(s) {
@@ -181,8 +209,8 @@ async function loadData() {
   try {
     const [overviewRes, alarmRes] = await Promise.all([
       getOverview().catch(() => ({ data: {} })),
-      // 多拉一些，客户端过滤掉已处理 / 处理中的，再取前 5 条"未处理"告警
-      getLatestAlarm(20).catch(() => ({ data: [] }))
+      // 与告警页"未处理"Tab 同源：直接拉 status=0 的全部未处理告警（不再用 latest-alarm 按时间截断）
+      pageAlarm({ current: 1, size: 20, status: 0 }).catch(() => ({ data: { records: [] } }))
     ])
     const d = overviewRes.data || {}
     stats.value = [
@@ -191,11 +219,27 @@ async function loadData() {
       { icon: '🏮', label: '灯杆总数', value: d.poleTotal ?? '-', to: '/pole' },
       { icon: '📋', label: '今日工单', value: d.workOrderToday ?? '-', to: '/workorder' }
     ]
-    // 只显示 status === 0（未处理）的前 5 条
-    alarms.value = (alarmRes.data || [])
-      .filter(a => (a.status ?? 0) === 0)
-      .slice(0, 5)
+    // 接口已按 status=0 过滤，这里直接取记录；首页预览展示前 10 条（其余可在告警页查看）
+    const alarmRows = (alarmRes.data || {}).records || (alarmRes.data || {}).list || []
+    alarms.value = alarmRows.slice(0, 10)
   } catch { /* 静默 */ }
+  // 待处理工单（运维工单 alarmId=0 + 告警工单 alarmId=1）独立拉取，失败不影响告警列表
+  await loadWorkOrders().catch(() => {})
+}
+
+/* 待处理工单：拉取 status=0 的运维工单与告警工单，合并去重后取最新的前 5 条 */
+async function loadWorkOrders() {
+  const [r0, r1] = await Promise.all([
+    pageWorkOrder({ current: 1, size: 20, status: 0, alarmId: 0 }).catch(() => ({ data: { records: [] } })),
+    pageWorkOrder({ current: 1, size: 20, status: 0, alarmId: 1 }).catch(() => ({ data: { records: [] } }))
+  ])
+  const rows0 = r0.data?.records || r0.data?.list || []
+  const rows1 = r1.data?.records || r1.data?.list || []
+  const seen = new Set()
+  workOrders.value = [...rows0, ...rows1]
+    .filter(w => (w.status ?? 0) === 0 && !seen.has(w.id) && seen.add(w.id))
+    .sort((a, b) => String(b.createTime || '').localeCompare(String(a.createTime || '')))
+    .slice(0, 5)
 }
 
 /* ---------------- 分配处理人（对齐 PC 端闭环流程） ----------------
@@ -325,21 +369,13 @@ onUnmounted(() => {
 .alarm-item {
   display: flex; align-items: center; padding: 13px 16px;
   border-bottom: 0.5px solid rgba(255,255,255,.04);
-  position: relative; overflow: hidden;
 }
 .alarm-item:last-child { border-bottom: none; }
-/* 待处理告警：按告警等级做右侧渐变染色（严重红/重要橙/一般蓝），与告警页卡牌一致 */
-.alarm-item::before {
-  content: '';
-  position: absolute; inset: 0;
-  pointer-events: none;
-  z-index: 0;
-}
-.alarm-item--1::before { background: linear-gradient(to left, rgba(245,108,108,.30), transparent 62%); }
-.alarm-item--2::before { background: linear-gradient(to left, rgba(230,162,60,.26), transparent 62%); }
-.alarm-item--3::before { background: linear-gradient(to left, rgba(144,202,249,.24), transparent 62%); }
-/* 卡片内容抬到染色层之上，保证文字清晰可读 */
-.alarm-item > * { position: relative; z-index: 1; }
+/* 待处理告警：按告警等级做右侧渐变染色（严重红/重要橙/一般蓝），与告警页卡牌一致；
+   直接写在 .alarm-item 背景上，避免 ::before 在玻璃卡内的层叠问题，保证一定可见 */
+.alarm-item--1 { background: linear-gradient(to left, rgba(245,108,108,.34), transparent 72%); }
+.alarm-item--2 { background: linear-gradient(to left, rgba(230,162,60,.30), transparent 72%); }
+.alarm-item--3 { background: linear-gradient(to left, rgba(144,202,249,.28), transparent 72%); }
 .alarm-dot { width: 7px; height: 7px; border-radius: 50%; margin-right: 10px; flex-shrink: 0; }
 .severity-error { background: #f56c6c; }
 .severity-warn { background: #e6a23c; }
@@ -351,6 +387,29 @@ onUnmounted(() => {
 :deep(.severity-2) { color: #e6a23c !important; }
 :deep(.severity-3) { color: #90caf9 !important; }
 :deep(.alarm-tag) { font-size: 18px; padding: 4px 12px; line-height: 1.4; }
+
+/* 待处理工单：按优先级做右侧渐变染色（高红/中橙/低黄），与工单页卡牌一致 */
+.wo-section { padding: 0; overflow: hidden; margin-bottom: 20px; }
+.wo-item {
+  display: flex; align-items: center; padding: 13px 16px;
+  border-bottom: 0.5px solid rgba(255,255,255,.04);
+}
+.wo-item:last-child { border-bottom: none; }
+.wo-item--1 { background: linear-gradient(to left, rgba(245,108,108,.34), transparent 72%); }
+.wo-item--2 { background: linear-gradient(to left, rgba(239,138,47,.36), transparent 72%); }
+.wo-item--3 { background: linear-gradient(to left, rgba(255,216,77,.28), transparent 72%); }
+.wo-dot { width: 7px; height: 7px; border-radius: 50%; margin-right: 10px; flex-shrink: 0; }
+.wo-dot--1 { background: #f56c6c; }
+.wo-dot--2 { background: #ef8a2f; }
+.wo-dot--3 { background: #ffd84d; }
+.wo-info { flex: 1; min-width: 0; }
+.wo-title { font-size: 14px; color: rgba(255,255,255,.85); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wo-time { font-size: 11px; color: rgba(255,255,255,.35); margin-top: 2px; }
+/* 优先级标签：高红 / 中橙 / 低黄，对齐工单页 wo-p-* 样式，深色玻璃卡上清晰可见 */
+:deep(.wo-p-1) { color: #f56c6c !important; border-color: #f56c6c !important; background-color: rgba(245,108,108,.18) !important; }
+:deep(.wo-p-2) { color: #ef8a2f !important; border-color: #ef8a2f !important; background-color: rgba(239,138,47,.18) !important; }
+:deep(.wo-p-3) { color: #ffd84d !important; border-color: #ffd84d !important; background-color: rgba(255,216,77,.18) !important; }
+:deep(.wo-tag) { font-size: 18px; padding: 4px 12px; line-height: 1.4; }
 
 .quick-grid {
   display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px;
