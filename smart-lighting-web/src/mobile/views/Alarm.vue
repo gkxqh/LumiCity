@@ -22,7 +22,7 @@
         @load="loadAlarms"
       >
         <div class="alarm-list">
-          <div class="glass-card alarm-card" v-for="a in list" :key="a.id">
+          <div class="glass-card alarm-card" :class="'alarm-card--' + (a.alarmLevel ?? 3)" v-for="a in list" :key="a.id">
             <div class="alarm-header">
               <van-tag round plain class="alarm-tag" :class="'status-' + a.status">{{ statusText(a.status) }}</van-tag>
               <van-tag round plain class="alarm-tag" :class="'sev-' + (a.alarmLevel ?? 3)" style="margin-left:4px">
@@ -61,14 +61,28 @@
 
     <!-- 新增弹窗 -->
     <van-action-sheet v-model:show="showAdd" title="新增告警" round>
-      <div class="sheet-body">
+      <div class="sheet-body" :class="'level-bg-' + form.alarmLevel">
         <van-form @submit="onAdd">
           <van-cell-group inset>
+            <!-- 关联设备：选择器，值=设备 deviceCode（后端 deviceId @NotBlank 必填） -->
             <van-field
-              v-model="form.deviceName"
-              label="设备名称"
-              placeholder="输入设备名称"
-              :rules="[{ required: true, message: '请填写设备名称' }]"
+              :model-value="deviceLabel"
+              label="关联设备"
+              placeholder="请选择设备"
+              is-link
+              readonly
+              :rules="[{ required: true, message: '请选择设备' }]"
+              @click="devicePickerShow = true"
+            />
+            <!-- 告警类型：选择器，值=枚举 OFFLINE/OVERVOLTAGE/OVERCURRENT/ABNORMAL（后端 alarmType @NotBlank 必填） -->
+            <van-field
+              :model-value="alarmTypeLabel"
+              label="告警类型"
+              placeholder="请选择告警类型"
+              is-link
+              readonly
+              :rules="[{ required: true, message: '请选择告警类型' }]"
+              @click="typePickerShow = true"
             />
             <van-field
               v-model="form.alarmContent"
@@ -98,6 +112,24 @@
         </van-form>
       </div>
     </van-action-sheet>
+
+    <!-- 设备选择器 -->
+    <van-popup v-model:show="devicePickerShow" position="bottom" round teleport="body">
+      <van-picker
+        :columns="deviceOptions.map(d => ({ text: `${d.deviceName}（${d.deviceCode}）`, value: d.deviceCode }))"
+        @confirm="({ selectedOptions }) => { form.deviceId = selectedOptions[0]?.value ?? ''; devicePickerShow = false }"
+        @cancel="devicePickerShow = false"
+      />
+    </van-popup>
+
+    <!-- 告警类型选择器 -->
+    <van-popup v-model:show="typePickerShow" position="bottom" round teleport="body">
+      <van-picker
+        :columns="alarmTypeOptions.map(t => ({ text: t.label, value: t.value }))"
+        @confirm="({ selectedOptions }) => { form.alarmType = selectedOptions[0]?.value ?? ''; typePickerShow = false }"
+        @cancel="typePickerShow = false"
+      />
+    </van-popup>
 
     <!-- ============ 分配处理人（未处理 → 处理中，后端自动生成告警工单） ============ -->
     <van-popup v-model:show="assignShow" position="bottom" round teleport="body" @closed="resetAssignForm">
@@ -216,6 +248,7 @@ import {
   listUsersByRole,
   getWorkOrderByAlarm
 } from '@/api/other'
+import { listAllDevice } from '@/api/device'
 
 const router = useRouter()
 
@@ -228,7 +261,33 @@ const pageNum = ref(1)
 const showAdd = ref(false)
 const submitting = ref(false)
 
-const form = reactive({ deviceName: '', alarmContent: '', alarmLevel: 3 })
+const form = reactive({ deviceId: '', alarmType: '', alarmContent: '', alarmLevel: 3 })
+
+/* ---------------- 新增告警：设备 / 告警类型 选择器 ---------------- */
+// 字段对齐后端 AlarmRecord 实体：deviceId(@NotBlank)/alarmType(@NotBlank)/alarmLevel(@NotNull) 必填
+// 对齐电脑端 alarm/index.vue 的"故障上报"表单（设备/告警类型/告警级别/告警内容）
+const deviceOptions = ref([])
+const devicePickerShow = ref(false)
+const typePickerShow = ref(false)
+const alarmTypeOptions = [
+  { label: '离线告警', value: 'OFFLINE' },
+  { label: '过压告警', value: 'OVERVOLTAGE' },
+  { label: '过流告警', value: 'OVERCURRENT' },
+  { label: '其他异常', value: 'ABNORMAL' }
+]
+const deviceLabel = computed(() => {
+  const d = deviceOptions.value.find(x => x.deviceCode === form.deviceId)
+  return d ? `${d.deviceName}（${d.deviceCode}）` : ''
+})
+const alarmTypeLabel = computed(() =>
+  alarmTypeOptions.find(t => t.value === form.alarmType)?.label || ''
+)
+async function loadDevices() {
+  try {
+    const res = await listAllDevice()
+    deviceOptions.value = res.data || []
+  } catch { /* 静默 */ }
+}
 
 function statusText(s) { return ['未处理', '处理中', '已闭环'][s] || '未知' }
 function sevText(s) { const v = Number(s);
@@ -386,10 +445,17 @@ function openView(a) {
 async function onAdd() {
   submitting.value = true
   try {
-    await addAlarm({ alarmContent: form.alarmContent, alarmLevel: form.alarmLevel, deviceName: form.deviceName })
+    // 后端 POST /alarm（@Valid AlarmRecord）必填 deviceId/alarmType/alarmLevel；
+    // alarmTime 不传，后端 Service 缺省取当前时间（避免移动端日期选择器繁琐）
+    await addAlarm({
+      deviceId: form.deviceId,
+      alarmType: form.alarmType,
+      alarmLevel: form.alarmLevel,
+      alarmContent: form.alarmContent
+    })
     showToast('告警已提交')
     showAdd.value = false
-    form.deviceName = ''; form.alarmContent = ''; form.alarmLevel = 3
+    form.deviceId = ''; form.alarmType = ''; form.alarmContent = ''; form.alarmLevel = 3
     pageNum.value = 1; finished.value = false; loadAlarms()
   } catch (e) { showToast(e.message) }
   finally { submitting.value = false }
@@ -397,6 +463,7 @@ async function onAdd() {
 
 onMounted(() => {
   loadAssignees()
+  loadDevices()
   // 列表由 van-list 首次 @load 自动触发
 })
 </script>
@@ -404,7 +471,19 @@ onMounted(() => {
 <style scoped>
 .alarm-page { min-height: 100vh; }
 .alarm-list { padding: 8px 16px; }
-.alarm-card { padding: 14px; margin-bottom: 10px; }
+.alarm-card { padding: 14px; margin-bottom: 10px; position: relative; overflow: hidden; }
+/* 告警管理卡片：按告警等级做右侧渐变染色（严重红/重要橙/一般蓝），与照明控制等卡片一致 */
+.alarm-card::before {
+  content: '';
+  position: absolute; inset: 0;
+  pointer-events: none;
+  z-index: 0;
+}
+.alarm-card--1::before { background: linear-gradient(to left, rgba(245,108,108,.30), transparent 62%); }
+.alarm-card--2::before { background: linear-gradient(to left, rgba(230,162,60,.26), transparent 62%); }
+.alarm-card--3::before { background: linear-gradient(to left, rgba(144,202,249,.24), transparent 62%); }
+/* 卡片内容抬到染色层之上，保证文字清晰可读 */
+.alarm-card > * { position: relative; z-index: 1; }
 .alarm-header { display: flex; align-items: center; gap: 4px; }
 :deep(.status-0) { color: #f56c6c !important; }
 :deep(.status-1) { color: #e6a23c !important; }
@@ -434,7 +513,19 @@ onMounted(() => {
 .fab:active { transform: scale(.92); }
 .fab-icon { font-size: 28px; color: rgba(255,255,255,.85); line-height:1; }
 
-.sheet-body { padding: 8px 0; min-height: 300px; }
+/* 新增告警表单：按告警等级渐变染色（严重红/重要橙/一般蓝），随等级 radio 实时切换 */
+.sheet-body { padding: 8px 0; min-height: 300px; position: relative; }
+.sheet-body::before {
+  content: '';
+  position: absolute; inset: 0;
+  pointer-events: none;
+  z-index: 0;
+}
+.level-bg-1::before { background: linear-gradient(to bottom, rgba(245,108,108,.30), transparent 72%); }
+.level-bg-2::before { background: linear-gradient(to bottom, rgba(230,162,60,.26), transparent 72%); }
+.level-bg-3::before { background: linear-gradient(to bottom, rgba(144,202,249,.24), transparent 72%); }
+/* 表单内容抬到染色层之上，保证文字清晰可读 */
+.sheet-body > * { position: relative; z-index: 1; }
 
 /* 底部表单弹层（与工单模块风格一致） */
 .sheet { padding: 20px 0 24px; }

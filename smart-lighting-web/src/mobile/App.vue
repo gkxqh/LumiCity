@@ -63,9 +63,9 @@ const titleMap = {
 const currentTitle = computed(() => titleMap[route.path] || '首页')
 
 function goBack() {
+  // 主界面不显示箭头；其余四个界面点击箭头一律返回主界面（首页）
   if (route.path === '/home') return
-  if (window.history.length > 1) router.back()
-  else router.push('/home')
+  router.push('/home')
 }
 </script>
 
@@ -190,7 +190,7 @@ function goBack() {
   border-top: 0.5px solid rgba(255, 255, 255, 0.08);
 }
 .lg-app :deep(.van-tabbar-item) {
-  color: rgba(255, 255, 255, 0.32);
+  color: rgba(255, 255, 255, 0.45);
   background: transparent;
   transition: color 0.2s;
 }
@@ -205,32 +205,39 @@ function goBack() {
   font-weight: 700;
   position: relative;
 }
-/* 选中项：高亮“药丸”背景，一眼可见当前界面 */
+/* 选中项：整块区域从上往下逐渐淡出的背景染色，当前界面一目了然 */
 .lg-app :deep(.van-tabbar-item--active)::after {
   content: '';
   position: absolute;
-  top: 6px;
-  bottom: 6px;
-  left: 8px;
-  right: 8px;
-  border-radius: 14px;
-  background: linear-gradient(180deg, rgba(79, 140, 255, 0.30), rgba(79, 140, 255, 0.14));
-  border: 1px solid rgba(120, 170, 255, 0.65);
-  box-shadow: 0 4px 14px rgba(79, 140, 255, 0.35);
+  top: 0;
+  left: 4px;
+  right: 4px;
+  bottom: 0;
+  border-radius: 0 0 16px 16px;
+  background: linear-gradient(
+    180deg,
+    rgba(79, 140, 255, 0.62) 0%,
+    rgba(79, 140, 255, 0.32) 40%,
+    rgba(79, 140, 255, 0.08) 72%,
+    transparent 100%
+  );
+  box-shadow:
+    inset 0 10px 18px -6px rgba(120, 170, 255, 0.45),
+    0 6px 18px rgba(79, 140, 255, 0.22);
   z-index: 0;
 }
-/* 选中项顶部更粗、带发光的指示条 */
+/* 选中项顶部加一条高亮光线 */
 .lg-app :deep(.van-tabbar-item--active)::before {
   content: '';
   position: absolute;
   top: 0;
   left: 50%;
   transform: translateX(-50%);
-  width: 30px;
-  height: 4px;
+  width: 34px;
+  height: 3px;
   border-radius: 0 0 4px 4px;
-  background: #4f8cff;
-  box-shadow: 0 0 8px 1px rgba(79, 140, 255, 0.9);
+  background: #a8c8ff;
+  box-shadow: 0 0 10px 2px rgba(120, 170, 255, 0.95);
   z-index: 2;
 }
 /* 选中项图标放大 + 发光，强化辨识 */

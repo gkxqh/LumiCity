@@ -8,6 +8,7 @@
         shape="round"
         @search="onSearch"
         @clear="onSearch"
+        @update:model-value="onKeywordInput"
       />
     </div>
 
@@ -37,7 +38,7 @@
         @load="loadPoles"
       >
         <div class="list-padding">
-          <div class="glass-card pole-card" v-for="p in list" :key="p.id">
+          <div class="glass-card pole-card" :class="'pole-card--' + (p.status || 0)" v-for="p in list" :key="p.id">
             <div class="pole-title">{{ p.poleName }}</div>
             <div class="pole-info">
               <span>{{ p.address || '-' }}</span>
@@ -84,26 +85,35 @@ async function loadRegions() {
   } catch {}
 }
 
-async function loadPoles() {
-  if (refreshing.value) { pageNum.value = 1; finished.value = false }
+async function loadPoles(replace = false) {
+  if (replace) { pageNum.value = 1; finished.value = false }
   loading.value = true
   try {
     const res = await pagePole({
       current: pageNum.value, size: 20,
-      road: keyword.value || undefined,
+      // 后端按 poleName 做 LIKE 模糊匹配（poleName = "{区}{路}{号}灯杆"），
+      // 因此输入灯杆名称或道路片段都能命中，比原先的 road 精确匹配更贴合搜索框文案
+      poleName: keyword.value || undefined,
       regionId: regionVal.value || undefined
     })
     const rows = (res.data?.records || res.data?.list || [])
-    if (refreshing.value) { list.value = rows; refreshing.value = false }
+    // replace=true 用于搜索/筛选/下拉刷新：整页替换；否则为滚动到底的增量追加
+    if (replace) { list.value = rows }
     else { list.value = [...list.value, ...rows] }
     finished.value = rows.length < 20
     pageNum.value++
   } catch (e) { showToast(e.message); finished.value = true }
-  finally { loading.value = false }
+  finally { loading.value = false; if (replace) refreshing.value = false }
 }
 
-function onSearch() { pageNum.value = 1; finished.value = false; loadPoles() }
-function onRefresh() { pageNum.value = 1; finished.value = false; loadPoles() }
+// 搜索框：输入即搜（轻量防抖），并支持回车/点击键盘“搜索”立即搜、清空即还原
+let searchTimer = null
+function onKeywordInput() {
+  if (searchTimer) clearTimeout(searchTimer)
+  searchTimer = setTimeout(() => { loadPoles(true) }, 300)
+}
+function onSearch() { if (searchTimer) clearTimeout(searchTimer); loadPoles(true) }
+function onRefresh() { loadPoles(true) }
 
 onMounted(() => { loadRegions(); loadPoles() })
 </script>
@@ -132,10 +142,36 @@ onMounted(() => { loadRegions(); loadPoles() })
   z-index: 2;
 }
 
-.pole-card { padding: 14px; margin-bottom: 8px; }
+.pole-card { padding: 14px; margin-bottom: 8px; position: relative; overflow: hidden; }
+/* 右侧按状态渐变半透明染色：在线绿 / 故障红 / 离线灰；右边缘最深、向左渐隐（与照明控制一致） */
+.pole-card::before {
+  content: '';
+  position: absolute; inset: 0;
+  pointer-events: none;
+  z-index: 0;
+}
+.pole-card--1::before { background: linear-gradient(to left, rgba(103,194,58,.22), transparent 62%); }
+.pole-card--2::before { background: linear-gradient(to left, rgba(245,108,108,.28), transparent 62%); }
+.pole-card--0::before { background: linear-gradient(to left, rgba(195,205,220,.18), transparent 62%); }
+/* 卡片内容抬到染色层之上，保证文字清晰可读 */
+.pole-card > * { position: relative; z-index: 1; }
 .pole-title { font-size: 15px; font-weight: 600; color: rgba(255,255,255,.88); }
 .pole-info { display: flex; justify-content: space-between; align-items: center; margin-top: 6px; font-size: 12px; color: rgba(255,255,255,.55); }
 :deep(.pole-s-1) { color: #67c23a !important; }
 :deep(.pole-s-2) { color: #f56c6c !important; }
-:deep(.pole-s-0) { color: rgba(255,255,255,.4) !important; }
+/* 离线：原 rgba(255,255,255,.4) 与深色玻璃卡片背景太接近，几乎看不出。
+   对齐“照明控制”的离线样式：提亮文字+边框色，并加微弱背景填充让椭圆轮廓清晰可见 */
+:deep(.pole-s-0) {
+  color: #e6e8ec !important;
+  border-color: #e6e8ec !important;
+  background-color: rgba(230,232,236,.16) !important;
+}
+/* 状态标签（椭圆胶囊）整体放大 1.2 倍；从右中点放大避免与左侧地址重叠 */
+:deep(.pole-s-1),
+:deep(.pole-s-2),
+:deep(.pole-s-0) {
+  transform: scale(1.2);
+  transform-origin: right center;
+  font-weight: 600;
+}
 </style>

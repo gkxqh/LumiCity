@@ -62,7 +62,7 @@
       >
         <div class="list-padding">
           <van-empty v-if="finished && list.length === 0" description="暂无工单" />
-          <div class="glass-card wo-card" v-for="w in list" :key="w.id">
+          <div class="glass-card wo-card" :class="'wo-card--' + (w.priority ?? 3)" v-for="w in list" :key="w.id">
             <div class="wo-head">
               <span class="wo-title">{{ w.title }}</span>
               <van-tag round plain :class="'wo-s-' + (w.status ?? 0)">
@@ -757,7 +757,19 @@ onMounted(async () => {
 }
 
 /* 工单卡片 */
-.wo-card { padding: 14px; margin-bottom: 10px; }
+.wo-card { padding: 14px; margin-bottom: 10px; position: relative; overflow: hidden; }
+/* 右侧按优先级渐变半透明染色：高红 / 中橙 / 低黄；右边缘最深、向左渐隐 */
+.wo-card::before {
+  content: '';
+  position: absolute; inset: 0;
+  pointer-events: none;
+  z-index: 0;
+}
+.wo-card--1::before { background: linear-gradient(to left, rgba(245,108,108,.30), transparent 64%); }
+.wo-card--2::before { background: linear-gradient(to left, rgba(239,138,47,.36), transparent 64%); }
+.wo-card--3::before { background: linear-gradient(to left, rgba(255,216,77,.26), transparent 64%); }
+/* 卡片内容抬到染色层之上，保证文字清晰可读 */
+.wo-card > * { position: relative; z-index: 1; }
 .wo-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
 .wo-title {
   flex: 1; font-size: 15px; font-weight: 600; color: rgba(255,255,255,.9);
@@ -774,9 +786,11 @@ onMounted(async () => {
 :deep(.wo-s-0) { color: #f56c6c !important; }
 :deep(.wo-s-1) { color: #e6a23c !important; }
 :deep(.wo-s-2) { color: #67c23a !important; }
-:deep(.wo-p-1) { color: #f56c6c !important; }
-:deep(.wo-p-2) { color: #e6a23c !important; }
-:deep(.wo-p-3) { color: rgba(255,255,255,.5) !important; }
+/* 优先级标签：与灯杆查询/照明控制一致，提亮文字+边框色+微弱背景填充，
+   避免深色玻璃卡上看不清（低优先级原 rgba(255,255,255,.5) 几乎不可见，改成黄色） */
+:deep(.wo-p-1) { color: #f56c6c !important; border-color: #f56c6c !important; background-color: rgba(245,108,108,.18) !important; }
+:deep(.wo-p-2) { color: #ef8a2f !important; border-color: #ef8a2f !important; background-color: rgba(239,138,47,.18) !important; }
+:deep(.wo-p-3) { color: #ffd84d !important; border-color: #ffd84d !important; background-color: rgba(255,216,77,.18) !important; }
 
 /* 卡片内操作按钮 */
 .wo-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 10px; }
