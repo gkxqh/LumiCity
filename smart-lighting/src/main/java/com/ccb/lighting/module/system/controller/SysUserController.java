@@ -41,7 +41,7 @@ public class SysUserController {
     /** 用户 Service，构造器注入 */
     private final SysUserService sysUserService;
 
-    @RequiresPerms("system:user:list")
+    @RequiresPerms("system:user:list")//权限标识
     @GetMapping("/page")
     public Result<Page<SysUser>> page(
             @RequestParam(defaultValue = "1") Integer current,
@@ -87,7 +87,7 @@ public class SysUserController {
 
     @RequiresPerms("system:user:list")
     @GetMapping("/{id}/roles")
-    public Result<List<Long>> getUserRoles(@PathVariable Long id) {
+    public Result<List<Long>> getUserRoles(@PathVariable Long id) {//查询某用户拥有的角色ID列表
         return Result.success(sysUserService.getUserRoleIds(id));
     }
 
@@ -96,10 +96,10 @@ public class SysUserController {
     public Result<Void> assignUserRoles(@PathVariable Long id, @RequestBody List<Long> roleIds) {
         sysUserService.assignRoles(id, roleIds);
         return Result.success();
-    }
+    }//给用户分配角色
 
     @GetMapping("/list-by-role")
     public Result<List<SysUser>> listByRoleCode(@RequestParam String roleCode) {
         return Result.success(sysUserService.listByRoleCode(roleCode));
-    }
+    }//通过角色编码查询用户
 }

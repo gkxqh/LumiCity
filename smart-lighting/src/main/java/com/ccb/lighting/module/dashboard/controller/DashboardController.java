@@ -35,8 +35,7 @@ import java.util.*;
  * - GET /dashboard/device/type-dist      设备类型分布
  * - GET /dashboard/alarm/category        告警分类统计
  * - GET /dashboard/latest-alarm          最新告警列表
- * - GET /dashboard/workorder/stats       工单快照
- * - GET /dashboard/latest-env            最新环境数据</p>
+ * - GET /dashboard/workorder/stats       工单快照</p>
  */
 @RestController
 @RequestMapping("/dashboard")
@@ -115,6 +114,7 @@ public class DashboardController {
         // 7. 今日新增工单数
         long workOrderToday = workOrderMapper.countToday();
 
+        //把各个查询结果塞进result这个 Map
         result.put("deviceTotal", deviceTotal);
         result.put("deviceOnline", deviceOnline);
         result.put("deviceFault", deviceFault);
@@ -122,7 +122,7 @@ public class DashboardController {
         result.put("todayEnergy", todayEnergy);
         result.put("poleTotal", poleTotal);
         result.put("workOrderToday", workOrderToday);
-        // 在线率
+        //在线率：在线设备数/设备总数
         if (deviceTotal != null && deviceTotal > 0) {
             result.put("onlineRate", String.format("%.2f", deviceOnline * 100.0 / deviceTotal) + "%");
         } else {

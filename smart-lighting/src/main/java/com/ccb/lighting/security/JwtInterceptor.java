@@ -92,7 +92,7 @@ public class JwtInterceptor implements HandlerInterceptor {
         SecurityContext.clear();
     }
 
-    @SuppressWarnings("unchecked")
+    @SuppressWarnings("unchecked")//把 token 里解析出来的对象安全地转成 List<String>
     private List<String> castList(Object o) {
         if (o == null) {
             return java.util.Collections.emptyList();

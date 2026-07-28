@@ -15,7 +15,7 @@
     <artifactId>smart-lighting</artifactId>
     <version>1.0.0</version>
     <name>smart-lighting</name>
-    <description>智慧城市照明综合控制系统 - 学习蓝本</description>
+    <description>智慧城市照明综合控制系统</description>
     <packaging>jar</packaging>
 
     <properties>
@@ -120,6 +120,7 @@
                     </excludes>
                 </configuration>
             </plugin>
+
         </plugins>
     </build>
 </project>

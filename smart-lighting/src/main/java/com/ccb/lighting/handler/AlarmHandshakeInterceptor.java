@@ -18,8 +18,7 @@ import java.util.Map;
  * 放在 URL 查询参数 ?token=xxx 里。本拦截器在握手前从 URL 取出 token 并校验，
  * 校验通过则把 userId/username 放入会话属性，供 Handler 使用。</p>
  *
- * <p>学习蓝本策略：未携带或无效 token 也允许连接（保证联调顺畅），仅不设置用户信息；
- * 正式环境应改为校验失败即拒绝握手（beforeHandshake 返回 false）。</p>
+ * <p>未携带或无效 token 直接拒绝握手，防止未认证客户端接入。</p>
  */
 @Slf4j
 @Component
@@ -33,15 +32,16 @@ public class AlarmHandshakeInterceptor implements HandshakeInterceptor {
                                    org.springframework.http.server.ServerHttpResponse response,
                                    WebSocketHandler wsHandler, Map<String, Object> attributes) {
         String token = extractToken(request.getURI());//从 URL 提取 token
-        if (StringUtils.hasText(token) && jwtUtil.isValid(token)) {//token非空且校验通过
-            try {
-                attributes.put("userId", jwtUtil.getUserId(token));//解析出userId
-                attributes.put("username", jwtUtil.getUsername(token));//从token解析出username
-            } catch (Exception e) {
-                log.warn("WebSocket 握手解析 token 失败：{}", e.getMessage());
-            }
-        } else {
-            log.warn("WebSocket 握手未携带有效 token，仍允许连接（学习蓝本宽松策略）");
+        if (!StringUtils.hasText(token) || !jwtUtil.isValid(token)) {
+            log.warn("WebSocket 握手拒绝：未携带或无效 token，URI={}", request.getURI());
+            return false;
+        }
+        try {
+            attributes.put("userId", jwtUtil.getUserId(token));//解析出userId
+            attributes.put("username", jwtUtil.getUsername(token));//从token解析出username
+        } catch (Exception e) {
+            log.warn("WebSocket 握手解析 token 失败：{}", e.getMessage());
+            return false;
         }
         return true;
     }
