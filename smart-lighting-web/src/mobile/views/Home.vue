@@ -35,12 +35,12 @@
           :key="a.id"
           @click="handleAlarm(a)"
         >
-          <div class="alarm-dot" :class="severityClass(a.severity)"></div>
+          <div class="alarm-dot" :class="severityClass(a.alarmLevel)"></div>
           <div class="alarm-info">
-            <div class="alarm-title">{{ a.content || a.deviceName || '未知告警' }}</div>
+            <div class="alarm-title">{{ a.alarmContent || a.deviceName || '未知告警' }}</div>
             <div class="alarm-time">{{ a.createTime }}</div>
           </div>
-          <van-tag round plain :class="'severity-' + (a.severity ?? 0)">{{ severityText(a.severity) }}</van-tag>
+          <van-tag round plain class="alarm-tag" :class="'severity-' + (a.alarmLevel ?? 3)">{{ severityText(a.alarmLevel) }}</van-tag>
         </div>
       </div>
     </div>
@@ -88,40 +88,66 @@ const alarms = ref([])
 let timer = null
 
 function severityClass(s) {
-  return s === 2 ? 'severity-error' : s === 1 ? 'severity-warn' : 'severity-info'
+  return s === 1 ? 'severity-error' : s === 2 ? 'severity-warn' : 'severity-info'
 }
 function severityText(s) {
-  return s === 2 ? '严重' : s === 1 ? '一般' : '提示'
+  return s === 1 ? '严重' : s === 2 ? '重要' : '一般'
+}
+
+async function refreshOverview() {
+  // 仅刷新顶部 4 个统计卡片（不重拉告警列表）
+  try {
+    const overviewRes = await getOverview().catch(() => ({ data: {} }))
+    const d = overviewRes.data || {}
+    const map = {
+      '设备总数': d.deviceTotal,
+      '待处理告警': d.alarmPending,   // 后端字段名是 alarmPending，不是 pendingAlarm
+      '灯杆总数': d.poleTotal,
+      '今日工单': d.workOrderToday
+    }
+    stats.value.forEach(s => {
+      if (map[s.label] !== undefined && map[s.label] !== null) {
+        s.value = map[s.label]
+      }
+    })
+  } catch { /* 静默 */ }
 }
 
 async function loadData() {
   try {
     const [overviewRes, alarmRes] = await Promise.all([
       getOverview().catch(() => ({ data: {} })),
-      getLatestAlarm(5).catch(() => ({ data: [] }))
+      // 多拉一些，客户端过滤掉已处理 / 处理中的，再取前 5 条"未处理"告警
+      getLatestAlarm(20).catch(() => ({ data: [] }))
     ])
     const d = overviewRes.data || {}
     stats.value = [
       { icon: '📡', label: '设备总数', value: d.deviceTotal ?? '-', to: '' },
-      { icon: '⚠️', label: '待处理告警', value: d.pendingAlarm ?? '-', to: '/alarm' },
+      { icon: '⚠️', label: '待处理告警', value: d.alarmPending ?? '-', to: '/alarm' },
       { icon: '🏮', label: '灯杆总数', value: d.poleTotal ?? '-', to: '/pole' },
       { icon: '📋', label: '今日工单', value: d.workOrderToday ?? '-', to: '' }
     ]
-    alarms.value = (alarmRes.data || []).slice(0, 5)
+    // 只显示 status === 0（未处理）的前 5 条
+    alarms.value = (alarmRes.data || [])
+      .filter(a => (a.status ?? 0) === 0)
+      .slice(0, 5)
   } catch { /* 静默 */ }
 }
 
 async function handleAlarm(a) {
   const confirm = await showConfirmDialog({
     title: '处理告警',
-    message: `确认处理「${a.content || a.deviceName}」？`,
+    message: `确认处理「${a.alarmContent || a.deviceName || '该告警'}」？`,
     confirmButtonText: '标记已处理'
   }).catch(() => false)
   if (confirm) {
     try {
       await handleAlarmApi({ id: a.id, status: 2, handleResult: '移动端处理' })
       showToast('已处理')
-      await loadData()
+      // ① 立即从本地列表移除（不等下一次轮询/刷新，体感即时）
+      alarms.value = alarms.value.filter(x => x.id !== a.id)
+      // ② 单独刷一下顶部"待处理告警"数字（告警列表本身就是已过滤的纯未处理，重拉没意义）
+      refreshOverview()
     } catch (e) {
       showToast(e.message)
     }
@@ -176,13 +202,14 @@ onUnmounted(() => {
 .alarm-dot { width: 7px; height: 7px; border-radius: 50%; margin-right: 10px; flex-shrink: 0; }
 .severity-error { background: #f56c6c; }
 .severity-warn { background: #e6a23c; }
-.severity-info { background: #909399; }
+.severity-info { background: #90caf9; }
 .alarm-info { flex: 1; min-width: 0; }
 .alarm-title { font-size: 14px; color: rgba(255,255,255,.85); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .alarm-time { font-size: 11px; color: rgba(255,255,255,.35); margin-top: 2px; }
-:deep(.severity-2) { color: #f56c6c !important; }
-:deep(.severity-1) { color: #e6a23c !important; }
-:deep(.severity-0) { color: rgba(255,255,255,.45) !important; }
+:deep(.severity-1) { color: #f56c6c !important; }
+:deep(.severity-2) { color: #e6a23c !important; }
+:deep(.severity-3) { color: #90caf9 !important; }
+:deep(.alarm-tag) { font-size: 18px; padding: 4px 12px; line-height: 1.4; }
 
 .quick-grid {
   display: grid; grid-template-columns: 1fr 1fr; gap: 10px;

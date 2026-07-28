@@ -2,7 +2,7 @@
   <div class="alarm-page">
     <van-nav-bar title="告警管理" left-text="返回" left-arrow @click-left="router.push('/home')" />
 
-    <van-tabs v-model:active="tabActive" sticky @change="loadAlarms">
+    <van-tabs v-model:active="tabActive" sticky @change="() => loadAlarms(true)">
       <van-tab title="全部" />
       <van-tab title="未处理" />
       <van-tab title="处理中" />
@@ -19,13 +19,13 @@
         <div class="alarm-list">
           <div class="glass-card alarm-card" v-for="a in list" :key="a.id">
             <div class="alarm-header">
-              <van-tag round plain :class="'status-' + a.status">{{ statusText(a.status) }}</van-tag>
-              <van-tag round plain :class="'sev-' + (a.severity ?? 0)" style="margin-left:4px">
-                {{ sevText(a.severity) }}
+              <van-tag round plain class="alarm-tag" :class="'status-' + a.status">{{ statusText(a.status) }}</van-tag>
+              <van-tag round plain class="alarm-tag" :class="'sev-' + (a.alarmLevel ?? 3)" style="margin-left:4px">
+                {{ sevText(a.alarmLevel) }}
               </van-tag>
               <span class="alarm-date">{{ formatTime(a.createTime) }}</span>
             </div>
-            <div class="alarm-body">{{ a.content || a.deviceName || '告警' }}</div>
+            <div class="alarm-body">{{ a.alarmContent || a.deviceName || '告警' }}</div>
             <div class="alarm-footer" v-if="a.status < 2">
               <button class="glass-btn handle-btn" @click="handle(a)">标记处理</button>
             </div>
@@ -60,12 +60,12 @@
               placeholder="描述告警详情"
               :rules="[{ required: true, message: '请填写告警内容' }]"
             />
-            <van-field name="severity" label="告警等级">
+            <van-field name="alarmLevel" label="告警等级">
               <template #input>
-                <van-radio-group v-model="form.severity" direction="horizontal">
-                  <van-radio :name="0">提示</van-radio>
-                  <van-radio :name="1">一般</van-radio>
-                  <van-radio :name="2">严重</van-radio>
+                <van-radio-group v-model="form.alarmLevel" direction="horizontal">
+                  <van-radio :name="1">严重</van-radio>
+                  <van-radio :name="2">重要</van-radio>
+                  <van-radio :name="3">一般</van-radio>
                 </van-radio-group>
               </template>
             </van-field>
@@ -98,21 +98,23 @@ const pageNum = ref(1)
 const showAdd = ref(false)
 const submitting = ref(false)
 
-const form = reactive({ deviceName: '', content: '', severity: 1 })
+const form = reactive({ deviceName: '', alarmContent: '', alarmLevel: 3 })
 
 function statusText(s) { return ['未处理', '处理中', '已闭环'][s] || '未知' }
-function sevText(s) { return s === 2 ? '严重' : s === 1 ? '一般' : '提示' }
+function sevText(s) { const v = Number(s);
+  return v === 1 ? '严重' : v === 2 ? '重要' : v === 3 ? '一般' : '未知'}
 function formatTime(t) { return t ? t.slice(0, 16).replace('T', ' ') : '' }
 
 function statusFilter() { return [null, 0, 1, 2][tabActive.value] }
 
-async function loadAlarms() {
-  if (refreshing.value) { pageNum.value = 1; finished.value = false }
+async function loadAlarms(reset = false) {
+  if (refreshing.value || reset) { pageNum.value = 1; finished.value = false }
+  if (reset) { list.value = [] }
   loading.value = true
   try {
     const res = await pageAlarm({ current: pageNum.value, size: 20, status: statusFilter() })
     const rows = (res.data || {}).records || (res.data || {}).list || []
-    if (refreshing.value) { list.value = rows; refreshing.value = false }
+    if (refreshing.value || reset) { list.value = rows; if (refreshing.value) refreshing.value = false }
     else { list.value = [...list.value, ...rows] }
     finished.value = rows.length < 20
     pageNum.value++
@@ -134,10 +136,10 @@ async function handle(a) {
 async function onAdd() {
   submitting.value = true
   try {
-    await addAlarm({ content: form.content, severity: form.severity, deviceName: form.deviceName })
+    await addAlarm({ alarmContent: form.alarmContent, alarmLevel: form.alarmLevel, deviceName: form.deviceName })
     showToast('告警已提交')
     showAdd.value = false
-    form.deviceName = ''; form.content = ''; form.severity = 1
+    form.deviceName = ''; form.alarmContent = ''; form.alarmLevel = 3
     pageNum.value = 1; finished.value = false; loadAlarms()
   } catch (e) { showToast(e.message) }
   finally { submitting.value = false }
@@ -152,9 +154,10 @@ async function onAdd() {
 :deep(.status-0) { color: #f56c6c !important; }
 :deep(.status-1) { color: #e6a23c !important; }
 :deep(.status-2) { color: #67c23a !important; }
-:deep(.sev-2) { color: #f56c6c !important; }
-:deep(.sev-1) { color: #e6a23c !important; }
-:deep(.sev-0) { color: rgba(255,255,255,.45) !important; }
+:deep(.sev-1) { color: #f56c6c !important; }
+:deep(.sev-2) { color: #e6a23c !important; }
+:deep(.sev-3) { color: #90caf9 !important; }
+:deep(.alarm-tag) { font-size: 18px; padding: 4px 12px; line-height: 1.4; }
 .alarm-date { margin-left: auto; font-size: 11px; color: rgba(255,255,255,.35); }
 .alarm-body { font-size: 14px; margin: 8px 0; line-height: 1.4; color: rgba(255,255,255,.85); }
 .alarm-footer { display: flex; justify-content: flex-end; }
