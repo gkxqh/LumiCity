@@ -56,17 +56,80 @@
         <div class="quick-icon">📍</div>
         <span>灯杆查询</span>
       </div>
+      <div class="glass-card quick-item" @click="router.push('/workorder')">
+        <div class="quick-icon">📋</div>
+        <span>工单运维</span>
+      </div>
     </div>
+
+    <!-- ============ 分配处理人表单（待处理告警 → 处理中，后端自动生成告警工单） ============ -->
+    <van-popup
+      v-model:show="assignShow"
+      position="bottom"
+      round
+      teleport="body"
+      @closed="resetAssignForm"
+    >
+      <div class="sheet">
+        <div class="sheet-title">分配处理人</div>
+        <van-form @submit="handleAssignSubmit">
+          <van-cell-group inset>
+            <van-field
+              :model-value="assignForm.alarmContent"
+              label="告警内容"
+              type="textarea"
+              rows="2"
+              autosize
+              readonly
+            />
+            <van-field
+              :model-value="assigneeLabel"
+              label="处理人"
+              placeholder="请选择运维人员"
+              is-link
+              readonly
+              :rules="[{ required: true, message: '请选择处理人' }]"
+              @click="assigneePickerShow = true"
+            />
+          </van-cell-group>
+          <div class="sheet-tip">提交后告警进入「处理中」，并自动生成告警工单指派给处理人</div>
+          <div class="sheet-btns">
+            <button type="button" class="glass-btn sheet-btn" @click="assignShow = false">取 消</button>
+            <van-button
+              class="sheet-btn"
+              type="primary"
+              round
+              block
+              native-type="submit"
+              :loading="assignSubmitting"
+            >确 定</van-button>
+          </div>
+        </van-form>
+      </div>
+    </van-popup>
+
+    <!-- 处理人选择器 -->
+    <van-popup v-model:show="assigneePickerShow" position="bottom" round teleport="body">
+      <van-picker
+        :columns="assigneeOptions.map(u => ({ text: u.label, value: u.value }))"
+        @confirm="({ selectedOptions }) => { assignForm.handleUser = selectedOptions[0]?.value ?? ''; assigneePickerShow = false }"
+        @cancel="assigneePickerShow = false"
+      />
+    </van-popup>
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted, onUnmounted } from 'vue'
+import { ref, reactive, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useUserStore } from '@/store/user'
-import { getOverview, getLatestAlarm } from '@/api/other'
-import { showToast, showConfirmDialog } from 'vant'
-import { handleAlarm as handleAlarmApi } from '@/api/other'
+import { showToast, showSuccessToast, showConfirmDialog } from 'vant'
+import {
+  getOverview,
+  getLatestAlarm,
+  handleAlarm as handleAlarmApi,
+  listUsersByRole
+} from '@/api/other'
 
 const router = useRouter()
 const userStore = useUserStore()
@@ -125,7 +188,7 @@ async function loadData() {
       { icon: '📡', label: '设备总数', value: d.deviceTotal ?? '-', to: '' },
       { icon: '⚠️', label: '待处理告警', value: d.alarmPending ?? '-', to: '/alarm' },
       { icon: '🏮', label: '灯杆总数', value: d.poleTotal ?? '-', to: '/pole' },
-      { icon: '📋', label: '今日工单', value: d.workOrderToday ?? '-', to: '' }
+      { icon: '📋', label: '今日工单', value: d.workOrderToday ?? '-', to: '/workorder' }
     ]
     // 只显示 status === 0（未处理）的前 5 条
     alarms.value = (alarmRes.data || [])
@@ -134,23 +197,76 @@ async function loadData() {
   } catch { /* 静默 */ }
 }
 
-async function handleAlarm(a) {
-  const confirm = await showConfirmDialog({
-    title: '处理告警',
-    message: `确认处理「${a.alarmContent || a.deviceName || '该告警'}」？`,
-    confirmButtonText: '标记已处理'
-  }).catch(() => false)
-  if (confirm) {
-    try {
-      await handleAlarmApi({ id: a.id, status: 2, handleResult: '移动端处理' })
-      showToast('已处理')
-      // ① 立即从本地列表移除（不等下一次轮询/刷新，体感即时）
-      alarms.value = alarms.value.filter(x => x.id !== a.id)
-      // ② 单独刷一下顶部"待处理告警"数字（告警列表本身就是已过滤的纯未处理，重拉没意义）
-      refreshOverview()
-    } catch (e) {
-      showToast(e.message)
-    }
+/* ---------------- 分配处理人（对齐 PC 端闭环流程） ----------------
+ * 待处理告警不能直接"标记已处理"，正确流程：
+ * ① 分配处理人（status=1，后端自动创建告警工单并指派）
+ * ② 工单模块-告警工单 Tab 填处理备注提交（工单完成）
+ * ③ 告警页填写处理意见（status=2 已闭环）
+ */
+
+const assignShow = ref(false)
+const assignSubmitting = ref(false)
+const assigneePickerShow = ref(false)
+const assigneeOptions = ref([])
+
+const assignForm = reactive({
+  id: null,
+  alarmContent: '',
+  handleUser: ''   // 处理人 username（对齐 PC 端 alarm/handle 的 handleUser 参数）
+})
+
+const assigneeLabel = computed(() =>
+  assigneeOptions.value.find(u => u.value === assignForm.handleUser)?.label || ''
+)
+
+function resetAssignForm() {
+  assignForm.id = null
+  assignForm.alarmContent = ''
+  assignForm.handleUser = ''
+}
+
+async function loadAssignees() {
+  try {
+    const res = await listUsersByRole('INSPECTOR')
+    // label 显示昵称，value 用 username（后端 handleUser 存的是用户名）
+    assigneeOptions.value = (res.data || []).map(u => ({
+      label: u.nickname || u.username,
+      value: u.username
+    }))
+  } catch { /* 静默 */ }
+}
+
+// 点击待处理告警：打开分配处理人表单
+function handleAlarm(a) {
+  resetAssignForm()
+  assignForm.id = a.id
+  assignForm.alarmContent = a.alarmContent || a.deviceName || '未知告警'
+  assignShow.value = true
+}
+
+async function handleAssignSubmit() {
+  assignSubmitting.value = true
+  try {
+    // status=1：告警进入处理中，后端自动创建告警工单并指派给 handleUser
+    await handleAlarmApi({ id: assignForm.id, status: 1, handleUser: assignForm.handleUser })
+    assignShow.value = false
+    // ① 立即从本地"待处理"列表移除（该告警已进入处理中）
+    alarms.value = alarms.value.filter(x => x.id !== assignForm.id)
+    // ② 刷新顶部"待处理告警"数字
+    refreshOverview()
+    showSuccessToast('已生成告警工单')
+    // ③ 引导用户前往工单模块继续处理
+    const go = await showConfirmDialog({
+      title: '分配成功',
+      message: '告警已进入「处理中」，并自动生成告警工单。\n是否前往工单模块处理？',
+      confirmButtonText: '去处理',
+      cancelButtonText: '稍后再说'
+    }).catch(() => false)
+    if (go) router.push('/workorder?tab=alarm')
+  } catch (e) {
+    showToast(e.message || '分配失败')
+  } finally {
+    assignSubmitting.value = false
   }
 }
 
@@ -161,6 +277,7 @@ function refresh() {
 
 onMounted(() => {
   loadData()
+  loadAssignees()
   timer = setInterval(loadData, 30000)
 })
 onUnmounted(() => {
@@ -212,7 +329,7 @@ onUnmounted(() => {
 :deep(.alarm-tag) { font-size: 18px; padding: 4px 12px; line-height: 1.4; }
 
 .quick-grid {
-  display: grid; grid-template-columns: 1fr 1fr; gap: 10px;
+  display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px;
 }
 .quick-item {
   display: flex; flex-direction: column; align-items: center; justify-content: center;
@@ -220,4 +337,24 @@ onUnmounted(() => {
   font-size: 13px; color: rgba(255,255,255,.85);
 }
 .quick-icon { font-size: 28px; }
+
+/* 底部表单弹层（与工单模块风格一致） */
+.sheet { padding: 20px 0 24px; }
+.sheet-title {
+  text-align: center; font-size: 16px; font-weight: 600;
+  color: rgba(255,255,255,.9); margin-bottom: 14px;
+}
+.sheet-tip {
+  padding: 10px 24px 0; font-size: 12px; line-height: 1.5;
+  color: rgba(255,255,255,.45);
+}
+.sheet-btns { display: flex; gap: 12px; padding: 18px 16px 0; }
+.sheet-btn { flex: 1; height: 44px; }
+.sheet :deep(.van-cell-group--inset) {
+  background: rgba(255,255,255,.04) !important;
+  border-radius: 14px;
+}
+.sheet :deep(.van-cell::after) {
+  border-color: rgba(255,255,255,.06);
+}
 </style>
