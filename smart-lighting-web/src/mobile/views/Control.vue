@@ -1,7 +1,5 @@
 <template>
   <div class="control-page">
-    <van-nav-bar title="照明控制" left-text="返回" left-arrow @click-left="router.push('/home')" />
-
     <!-- 道路选择（原生 select，触发系统级选择器） -->
     <div class="section-padding">
       <div class="glass-card road-selector">
@@ -43,7 +41,7 @@
 
       <!-- 灯杆列表 -->
       <div class="pole-list">
-        <div class="glass-card pole-card" v-for="p in poles" :key="p.id">
+        <div class="glass-card pole-card" :class="'pole-card--' + (p.status || 0)" v-for="p in poles" :key="p.id">
           <div class="pole-header">
             <span class="pole-name">{{ p.poleName }}</span>
             <van-tag round plain :class="'pole-status-' + (p.status || 0)">
@@ -56,15 +54,17 @@
           </div>
           <div class="pole-actions">
             <button
-              class="glass-btn"
+              class="glass-btn pole-switch-btn"
               style="height:30px;padding:0 12px;font-size:12px"
+              :disabled="p.status !== 1"
               @click="togglePole(p)"
-            >{{ p.lightStatus === 1 ? '关闭' : '开启' }}</button>
+            >{{ p.status === 1 ? (p.lightStatus === 1 ? '关闭' : '开启') : '不可控' }}</button>
             <van-slider
               v-model="p._brightness"
               style="width:120px"
-              :min="1"
+              :min="0"
               :max="100"
+              :disabled="p.status !== 1"
               @drag-end="setBrightness(p)"
             />
           </div>
@@ -125,11 +125,28 @@ async function batchBrightness() {
 }
 
 async function togglePole(p) {
-  const target = p.lightStatus === 1 ? 0 : 1
+  // 后端 /lighting/control/switch 要求 @RequestParam String action，取值 "on"/"off"
+  // （service 内 boolean on = "on".equals(action)），不能用数字 0/1，参数名也不能用 status
+  const turnOn = p.lightStatus !== 1
+  const action = turnOn ? 'on' : 'off'
   try {
-    const res = await controlSwitch({ poleId: p.id, status: target })
-    showToast(res.message || (target ? '已开启' : '已关闭'))
-    p.lightStatus = target
+    const res = await controlSwitch({ poleId: p.id, action })
+    // 后端 data.simStatus：SUCCESS=真正改库 / SKIPPED=离线跳过 / FAIL=通信失败
+    const data = res.data || {}
+    if (data.simStatus === 'SUCCESS') {
+      p.lightStatus = turnOn ? 1 : 0
+      if (turnOn) {
+        // 开启：用后端返回的亮度同步滑块；未返回则给一个合理默认，避免滑块停在 0%
+        const b = data.lightBrightness != null ? data.lightBrightness : 80
+        p.lightBrightness = b
+        p._brightness = b
+      } else {
+        // 关闭：亮度与右侧拖动条一起归零
+        p.lightBrightness = 0
+        p._brightness = 0
+      }
+    }
+    showToast(data.message || res.message || (turnOn ? '已开启' : '已关闭'))
   } catch (e) { showToast(e.message) }
 }
 
@@ -175,12 +192,44 @@ loadRoads()
 .brightness-label { font-size: 13px; color: rgba(255,255,255,.55); white-space: nowrap; }
 
 .pole-list { margin-top: 8px; }
-.pole-card { padding: 14px; margin-bottom: 10px; }
+.pole-card { padding: 14px; margin-bottom: 10px; position: relative; overflow: hidden; }
+/* 右侧按状态渐变半透明染色：在线绿 / 故障红 / 离线灰；右边缘最深、向左渐隐 */
+.pole-card::before {
+  content: '';
+  position: absolute; inset: 0;
+  pointer-events: none;
+  z-index: 0;
+}
+.pole-card--1::before { background: linear-gradient(to left, rgba(103,194,58,.22), transparent 62%); }
+.pole-card--2::before { background: linear-gradient(to left, rgba(245,108,108,.28), transparent 62%); }
+.pole-card--0::before { background: linear-gradient(to left, rgba(195,205,220,.18), transparent 62%); }
+/* 卡片内容抬到染色层之上，保证文字清晰可读 */
+.pole-card > * { position: relative; z-index: 1; }
+/* 离线/故障灯的操作按钮与调光条禁用灰显 */
+.pole-switch-btn:disabled {
+  opacity: .38;
+  cursor: not-allowed;
+  filter: grayscale(.75);
+}
 .pole-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
 .pole-name { font-size: 14px; font-weight: 600; color: rgba(255,255,255,.88); }
 :deep(.pole-status-1) { color: #67c23a !important; }
 :deep(.pole-status-2) { color: #f56c6c !important; }
-:deep(.pole-status-0) { color: rgba(255,255,255,.4) !important; }
+/* 离线：原 rgba(255,255,255,.4) 与深色玻璃卡片背景太接近，几乎看不出。
+   提亮文字+边框色，并加微弱背景填充让椭圆轮廓清晰可见 */
+:deep(.pole-status-0) {
+  color: #e6e8ec !important;
+  border-color: #e6e8ec !important;
+  background-color: rgba(230,232,236,.16) !important;
+}
+/* 状态标签（椭圆胶囊）整体放大 1.3 倍；从右中点放大避免与左侧灯杆名重叠 */
+:deep(.pole-status-1),
+:deep(.pole-status-2),
+:deep(.pole-status-0) {
+  transform: scale(1.3);
+  transform-origin: right center;
+  font-weight: 600;
+}
 .pole-detail { font-size: 12px; color: rgba(255,255,255,.5); margin-bottom: 10px; display: flex; gap: 16px; }
 .pole-actions { display: flex; align-items: center; gap: 12px; }
 </style>

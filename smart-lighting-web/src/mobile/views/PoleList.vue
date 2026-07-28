@@ -1,7 +1,5 @@
 <template>
   <div class="pole-page">
-    <van-nav-bar title="灯杆查询" left-text="返回" left-arrow @click-left="router.push('/home')" />
-
     <!-- 搜索栏 -->
     <div class="section-padding">
       <van-search

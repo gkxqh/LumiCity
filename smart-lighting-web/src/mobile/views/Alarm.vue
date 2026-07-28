@@ -7,8 +7,6 @@
 -->
 <template>
   <div class="alarm-page">
-    <van-nav-bar title="告警管理" left-text="返回" left-arrow @click-left="router.push('/home')" />
-
     <van-tabs v-model:active="tabActive" sticky @change="() => loadAlarms(true)">
       <van-tab title="全部" />
       <van-tab title="未处理" />
