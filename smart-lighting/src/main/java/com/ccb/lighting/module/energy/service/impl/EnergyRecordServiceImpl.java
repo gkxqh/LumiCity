@@ -10,8 +10,11 @@ import com.ccb.lighting.common.PageQuery;
 import com.ccb.lighting.module.energy.entity.EnergyRecord;
 import com.ccb.lighting.module.energy.mapper.EnergyRecordMapper;
 import com.ccb.lighting.module.energy.service.EnergyRecordService;
+import com.ccb.lighting.module.excel.service.ExcelService;
+import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
@@ -110,24 +113,20 @@ public class EnergyRecordServiceImpl implements EnergyRecordService {
         return result;
     }
 
+    @Autowired
+    private ExcelService excelService;
+
     /**
      * 导出能耗报表
      * 根据条件筛选能耗记录，使用 EasyExcel 导出为 Excel 文件
      * 直接使用 EnergyRecord 实体（已添加 @ExcelProperty 注解），无需转换
      */
     @Override
-    public void exportReport(OutputStream outputStream, String deviceId, 
-                            LocalDateTime startTime, LocalDateTime endTime) {
+    public void exportReport(HttpServletResponse response, String filename,String deviceId) {
         // 构建查询条件
         LambdaQueryWrapper<EnergyRecord> wrapper = new LambdaQueryWrapper<>();
         if (StringUtils.hasText(deviceId)) {
             wrapper.eq(EnergyRecord::getDeviceId, deviceId);
-        }
-        if (startTime != null) {
-            wrapper.ge(EnergyRecord::getRecordTime, startTime);
-        }
-        if (endTime != null) {
-            wrapper.le(EnergyRecord::getRecordTime, endTime);
         }
         wrapper.orderByAsc(EnergyRecord::getRecordTime);
 
@@ -136,10 +135,12 @@ public class EnergyRecordServiceImpl implements EnergyRecordService {
 
         try {
             // 直接使用 EnergyRecord 实体，@ExcelProperty 注解定义了 Excel 列标题
-            EasyExcel.write(outputStream, EnergyRecord.class)
-                    .sheet("能耗报表")
-                    .registerWriteHandler(new LongestMatchColumnWidthStyleStrategy())
-                    .doWrite(records);
+//            EasyExcel.write(outputStream, EnergyRecord.class)
+//                    .sheet("能耗报表")
+//                    .registerWriteHandler(new LongestMatchColumnWidthStyleStrategy())
+//                    .doWrite(records);
+            excelService.export(response,filename, records, EnergyRecord.class);
+
         } catch (Exception e) {
             log.error("能耗报表导出失败", e);
             throw new BusinessException("导出失败：" + e.getMessage());

@@ -250,14 +250,14 @@ async function handleExport() {
       deviceId = tableData.value[0].deviceId
     }
     
-    const res = await exportEnergyReport({ deviceId })
-    if (!res || !res.data) {
-      ElMessage.error('导出失败')
+    // exportEnergyReport 返回的是原始 Blob（request.js 拦截器对 blob 响应做了特殊处理）
+    const blob = await exportEnergyReport({ deviceId })
+    if (!(blob instanceof Blob)) {
+      ElMessage.error('导出失败：响应格式异常')
       return
     }
     
     // 创建下载链接
-    const blob = new Blob([res.data], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
     const url = window.URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url

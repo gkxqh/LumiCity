@@ -5,9 +5,11 @@ import com.ccb.lighting.common.PageQuery;
 import com.ccb.lighting.common.Result;
 import com.ccb.lighting.module.energy.entity.EnergyRecord;
 import com.ccb.lighting.module.energy.service.EnergyRecordService;
+import com.ccb.lighting.module.excel.service.ExcelService;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -45,6 +47,9 @@ public class EnergyRecordController {
 
     /** 能耗记录 Service，构造器注入 */
     private final EnergyRecordService energyRecordService;
+
+
+
 
     /**
      * 分页查询能耗记录
@@ -121,24 +126,17 @@ public class EnergyRecordController {
      * 前端通过 GET 请求下载 Excel 文件。</p>
      *
      * @param deviceId  设备ID（可选）
-     * @param startTime 开始时间（可选）
-     * @param endTime   结束时间（可选）
      * @param response  HTTP 响应对象
      */
     @GetMapping("/export")
     public void exportReport(
             @RequestParam(required = false) String deviceId,
-            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime startTime,
-            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime endTime,
             HttpServletResponse response) throws IOException {
         
         // 设置响应头
-        String filename = "能耗报表_" + LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss")) + ".xlsx";
-        response.setContentType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
-        response.setCharacterEncoding("utf-8");
-        response.setHeader("Content-Disposition", "attachment;filename=" + URLEncoder.encode(filename, StandardCharsets.UTF_8));
+        String filename = "能耗报表_" + LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss"));
 
         // 调用 Service 导出
-        energyRecordService.exportReport(response.getOutputStream(), deviceId, startTime, endTime);
+       energyRecordService.exportReport(response, filename,deviceId);
     }
 }
