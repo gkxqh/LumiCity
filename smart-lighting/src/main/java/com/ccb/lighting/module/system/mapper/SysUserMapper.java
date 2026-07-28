@@ -17,8 +17,7 @@ import java.util.List;
  * <p>继承 BaseMapper<SysUser> 后，MyBatis-Plus 自动提供单表的 CRUD 方法：
  * insert / deleteById / updateById / selectById / selectList 等，无需写 SQL。</p>
  *
- * <p>@Mapper 作用：让 Spring 容器扫描并生成代理实现类，可在 Service 里直接注入使用。
- * （项目若用了 @MapperScan 扫描包，可省略 @Mapper，但显式标注更直观，学习蓝本保留。）</p>
+ * <p>@Mapper 作用：让 Spring 容器扫描并生成代理实现类，可在 Service 里直接注入使用。</p>
  *
  * <p>多表关联查询 BaseMapper 不支持，需自己写方法 + SQL。
  * 这里 selectUserRoleList 通过 @Select 注解写 SQL，查某用户的所有角色。</p>
@@ -53,7 +52,7 @@ public interface SysUserMapper extends BaseMapper<SysUser> {
             "INNER JOIN sys_role_menu rm ON m.id = rm.menu_id " +
             "INNER JOIN sys_user_role ur ON rm.role_id = ur.role_id " +
             "WHERE ur.user_id = #{userId} AND m.perms IS NOT NULL AND m.deleted = 0")
-    List<String> selectUserPerms(@Param("userId") Long userId);
+    List<String> selectUserPerms(@Param("userId") Long userId);//查用户的全部权限标识。用户→用户角色中间表→角色菜单中间表→菜单表，最终取出所有去重的权限标识（perms）
 
     /** 删除某用户的全部角色关联（重新分配前调用） */
     @Delete("DELETE FROM sys_user_role WHERE user_id = #{userId}")

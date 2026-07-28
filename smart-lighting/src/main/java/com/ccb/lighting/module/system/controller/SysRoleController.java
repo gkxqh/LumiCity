@@ -35,7 +35,7 @@ public class SysRoleController {
     @GetMapping("/list")
     public Result<List<SysRole>> list(String roleName, Integer status) {
         return Result.success(sysRoleService.list(roleName, status));
-    }
+    }//查询角色列表，不分页，用于下拉选择等
 
     @RequiresPerms("system:role:list")
     @GetMapping("/page")
@@ -44,10 +44,10 @@ public class SysRoleController {
             @RequestParam(defaultValue = "10") Integer size,
             String roleName, Integer status) {
         return Result.success(sysRoleService.pageList(current, size, roleName, status));
-    }
+    }//分页查询角色列表
 
     @RequiresPerms("system:role:list")
-    @GetMapping("/{id}")
+    @GetMapping("/{id}")//根据ID查询角色详情
     public Result<SysRole> getById(@PathVariable Long id) {
         return Result.success(sysRoleService.getById(id));
     }
@@ -57,30 +57,30 @@ public class SysRoleController {
     public Result<Void> add(@RequestBody SysRole role) {
         sysRoleService.add(role);
         return Result.success();
-    }
+    }//添加角色
 
     @RequiresPerms("system:role:edit")
     @PutMapping
     public Result<Void> update(@RequestBody SysRole role) {
         sysRoleService.update(role);
         return Result.success();
-    }
+    }//修改角色
 
     @RequiresPerms("system:role:delete")
     @DeleteMapping("/{id}")
     public Result<Void> delete(@PathVariable Long id) {
         sysRoleService.delete(id);
         return Result.success();
-    }
+    }//删除角色
 
     @RequiresPerms("system:role:list")
-    @GetMapping("/{id}/menus")
+    @GetMapping("/{id}/menus")//查询某角色绑定的菜单ID列表
     public Result<List<Long>> getMenus(@PathVariable Long id) {
         return Result.success(sysRoleService.getMenuIds(id));
     }
 
     @RequiresPerms("system:role:edit")
-    @PutMapping("/{id}/menus")
+    @PutMapping("/{id}/menus")//给角色分配菜单权限
     public Result<Void> assignMenus(@PathVariable Long id, @RequestBody List<Long> menuIds) {
         sysRoleService.assignMenus(id, menuIds);
         return Result.success();

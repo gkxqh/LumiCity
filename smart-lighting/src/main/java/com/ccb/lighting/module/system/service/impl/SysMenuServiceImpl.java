@@ -44,7 +44,7 @@ public class SysMenuServiceImpl implements SysMenuService {
         }
         // 顶层节点（parentId = 0）作为树根
         List<SysMenu> roots = childMap.getOrDefault(0L, new ArrayList<>());
-        buildChildren(roots, childMap);
+        buildChildren(roots, childMap);//递归把子节点挂到父节点的 children 上
         return roots;
     }
 

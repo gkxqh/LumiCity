@@ -14,11 +14,11 @@ import java.time.LocalDateTime;
 /**
  * 告警记录实体 AlarmRecord
  *
- * <p>智慧城市照明系统的"哨兵"——设备发生异常时自动生成告警记录，
+ * <p>设备发生异常时生成告警记录，
  * 运维人员在系统里处理告警，形成"产生 → 处理 → 闭环"的闭环流程。</p>
  *
  * <p>告警类型（alarmType）：
- * - OFFLINE：离线告警（设备超过阈值未上报心跳）
+ * - OFFLINE：离线告警
  * - OVERVOLTAGE：过压告警（电压超过安全范围）
  * - OVERCURRENT：过流告警（电流超过额定值）
  * - ABNORMAL：其他异常（如灯泡损坏、传感器故障）</p>

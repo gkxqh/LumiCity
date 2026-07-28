@@ -1,7 +1,6 @@
 package com.ccb.lighting.module.alarm.controller;
 
 import com.baomidou.mybatisplus.core.metadata.IPage;
-import com.ccb.lighting.common.PageQuery;
 import com.ccb.lighting.common.Result;
 import com.ccb.lighting.module.alarm.dto.AlarmQueryDTO;
 import com.ccb.lighting.module.alarm.entity.AlarmRecord;
@@ -41,8 +40,8 @@ public class AlarmRecordController {
 
     /**
      * 新增告警记录
-     * 设备发生异常时由系统调用；也可用于前端"模拟告警"按钮触发，便于演示 WebSocket 推送。
-     * 入库后 Service 会通过 WebSocket 广播 alarm_new 事件给所有在线客户端。
+     * 设备发生异常时调用，也可用于前端"模拟告警"按钮触发
+     * 入库后 Service 会通过 WebSocket 广播 alarm_new 事件给所有在线客户端
      *
      * @param record 告警信息（@Valid 校验 deviceId/alarmType/alarmLevel 必填）
      * @return 操作结果

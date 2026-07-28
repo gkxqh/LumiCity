@@ -30,32 +30,32 @@ public class SysMenuController {
     private final SysMenuService sysMenuService;
 
     @RequiresPerms("system:menu:list")
-    @GetMapping("/list")
+    @GetMapping("/list")//查询所有菜单（没用过）
     public Result<List<SysMenu>> list() {
         return Result.success(sysMenuService.list());
     }
 
     @RequiresPerms("system:menu:list")
-    @GetMapping("/tree")
+    @GetMapping("/tree")//查询菜单树（menu.vue（菜单管理页）、role.vue（角色分配权限时加载菜单树）用了）
     public Result<List<SysMenu>> tree() {
         return Result.success(sysMenuService.tree());
     }
 
     @RequiresPerms("system:menu:list")
-    @GetMapping("/{id}")
+    @GetMapping("/{id}")//根据ID查询菜单详情（没用过）
     public Result<SysMenu> getById(@PathVariable Long id) {
         return Result.success(sysMenuService.getById(id));
     }
 
     @RequiresPerms("system:menu:add")
-    @PostMapping
+    @PostMapping//添加菜单（menu.vue的addmenu）
     public Result<Void> add(@RequestBody SysMenu menu) {
         sysMenuService.add(menu);
         return Result.success();
     }
 
     @RequiresPerms("system:menu:edit")
-    @PutMapping
+    @PutMapping//修改菜单（menu.vue的updatemenu）
     public Result<Void> update(@RequestBody SysMenu menu) {
         sysMenuService.update(menu);
         return Result.success();
@@ -63,7 +63,7 @@ public class SysMenuController {
 
     @RequiresPerms("system:menu:delete")
     @DeleteMapping("/{id}")
-    public Result<Void> delete(@PathVariable Long id) {
+    public Result<Void> delete(@PathVariable Long id) {//删除菜单（menu.vue的deletemenu）
         sysMenuService.delete(id);
         return Result.success();
     }

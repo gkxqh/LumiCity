@@ -19,11 +19,11 @@ import java.io.Serializable;
  * - @EqualsAndHashCode(callSuper = true)：Lombok 生成 equals/hashCode 时把父类 BaseEntity 的字段也算进去，
  *   继承场景下必须加，否则可能只比子类字段导致 id 相同的两个对象判不相等</p>
  *
- * <p>表结构参考（学习时建表用）：
+ * <p>表结构：
  * CREATE TABLE sys_user (
  *   id BIGINT PRIMARY KEY AUTO_INCREMENT,
  *   username VARCHAR(50) NOT NULL COMMENT '用户名',
- *   password VARCHAR(100) NOT NULL COMMENT '密码（BCrypt）',
+ *   password VARCHAR(100) NOT NULL COMMENT '密码',
  *   nickname VARCHAR(50) COMMENT '昵称',
  *   phone VARCHAR(20) COMMENT '手机号',
  *   email VARCHAR(50) COMMENT '邮箱',
@@ -40,7 +40,7 @@ public class SysUser extends BaseEntity implements Serializable {
     /** 用户名（登录账号），唯一，新增时需查重 */
     private String username;
 
-    /** 密码：存储 BCrypt 加密后的值，绝不能存明文 */
+    /** 密码：存储 BCrypt 加密后的值 */
     private String password;
 
     /** 昵称：用于前端页面展示的真实姓名 */

@@ -22,7 +22,6 @@ import java.awt.image.BufferedImage;
 import java.io.ByteArrayOutputStream;
 import java.text.SimpleDateFormat;
 import java.util.Date;
-import java.util.Random;
 
 /**
  * 视频摄像头 Service 实现类
@@ -124,12 +123,10 @@ public class VideoCameraServiceImpl implements VideoCameraService {
             g.fillRect(150 + i * 40, 280, 18, 4);
         }
 
-        // 以 id + 秒级时间作种子，画面稳定且每秒略有变化
-        Random r = new Random(id * 1000L + System.currentTimeMillis() / 1000);
         // 车辆（车身体 + 红尾灯 + 白头灯）
         for (int i = 0; i < 3; i++) {
-            int cx = 150 + r.nextInt(340);
-            int cy = 232 + r.nextInt(90);
+            int cx = 150 + 170;
+            int cy = 232 + 45;
             g.setColor(new Color(28, 30, 36));
             g.fillRect(cx - 6, cy - 14, 36, 20);
             g.setColor(new Color(255, 80, 60));
@@ -140,8 +137,8 @@ public class VideoCameraServiceImpl implements VideoCameraService {
         // 行人
         g.setColor(new Color(120, 130, 140));
         for (int i = 0; i < 2; i++) {
-            int px = 80 + r.nextInt(480);
-            int py = 305 + r.nextInt(35);
+            int px = 80 + 240;
+            int py = 305 + 17;
             g.fillRect(px, py - 18, 6, 18);
             g.fillOval(px + 3, py - 24, 6, 6);
         }

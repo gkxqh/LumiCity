@@ -23,7 +23,9 @@ export function connectAlarmWS() {
   if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) return
 
   const proto = window.location.protocol === 'https:' ? 'wss' : 'ws'
-  const token = getToken() || ''
+  const token = getToken()
+  // 严格模式：无 token 时不发起连接，避免被后端拒绝后陷入重连循环
+  if (!token) return
   // 路径带 /api 前缀，开发环境由 Vite 代理（需 ws:true）转发到后端 8080
   const url = `${proto}://${window.location.host}/api/ws/alarm?token=${token}`
 
@@ -86,6 +88,8 @@ export function disconnectAlarmWS() {
 
 function scheduleReconnect() {
   if (reconnectTimer) return
+  // token 为空时不重连，避免无效重连循环
+  if (!getToken()) return
   reconnectTimer = setTimeout(() => {
     reconnectTimer = null
     connectAlarmWS()

@@ -190,7 +190,6 @@ public class AlarmRecordServiceImpl implements AlarmRecordService {
 
     /**
      * 构造 WebSocket 推送消息体
-     * 结构：{ event: "alarm_new"/"alarm_handled", data: { id, deviceId, alarmType, ... }, time }
      * 时间字段统一转字符串，避免 LocalDateTime 在不同 Jackson 配置下序列化不一致。
      */
     private Map<String, Object> buildMessage(String event, AlarmRecord record) {
@@ -210,4 +209,22 @@ public class AlarmRecordServiceImpl implements AlarmRecordService {
         message.put("time", LocalDateTime.now().toString());
         return message;
     }
+    /*
+      结构：
+      {
+        "event": "alarm_new",// 或 "alarm_handled"，表示事件类型
+        "data": {            // 告警的详细数据
+          "id": 1,
+          "deviceId": 10,
+          "poleId": 5,
+          "alarmType": "OFFLINE",
+          "alarmLevel": 1,
+          "alarmContent": "设备离线超过10分钟",
+          "alarmTime": "2026-07-28T10:30:00",
+          "status": 0,
+          "handleUser": null
+        },
+        "time": "2026-07-28T10:30:05" // 消息发送时间
+      }
+     */
 }
