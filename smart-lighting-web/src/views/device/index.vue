@@ -95,6 +95,11 @@
           </template>
         </el-table-column>
         <el-table-column prop="poleId" label="所属灯杆ID" width="120" align="center" />
+        <el-table-column label="所属灯杆名称" min-width="140" show-overflow-tooltip>
+          <template #default="{ row }">
+            {{ getPoleName(row.poleId) }}
+          </template>
+        </el-table-column>
         <el-table-column prop="status" label="状态" width="90" align="center">
           <template #default="{ row }">
             <el-tag :type="statusTagType(row.status)" effect="light">
@@ -280,6 +285,13 @@ const poleOptions = ref([])
 async function loadPoleOptions() {
   const res = await listPole()
   poleOptions.value = res.data || []
+}
+
+// 根据 poleId 查找灯杆名称（用于表格展示）
+function getPoleName(poleId) {
+  if (!poleId) return ''
+  const pole = poleOptions.value.find(p => p.id === poleId)
+  return pole ? pole.poleName : poleId
 }
 
 /* ---------------- 新增/编辑弹窗 ---------------- */

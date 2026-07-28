@@ -66,3 +66,8 @@ export function exportDevice() {
 export function listAllDevice() {
   return request({ url: '/device/listAll', method: 'get' })
 }
+
+// ========== 区域管理（v2） ==========
+export function listRegion() {
+  return request({ url: '/device/region/list', method: 'get' })
+}
