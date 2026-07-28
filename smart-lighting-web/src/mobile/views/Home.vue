@@ -31,6 +31,7 @@
       <div v-else>
         <div
           class="alarm-item"
+          :class="'alarm-item--' + (a.alarmLevel ?? 3)"
           v-for="(a, i) in alarms"
           :key="a.id"
           @click="handleAlarm(a)"
@@ -275,13 +276,23 @@ function refresh() {
   loadData()
 }
 
+/* 实时刷新：① 切回本页/App 可见，或窗口重新聚焦时立即拉取（新告警即时出现）；
+   ② 驻留本页时短轮询，保证新增/处理都能及时反映 */
+function onVisibility() {
+  if (document.visibilityState === 'visible') loadData()
+}
+
 onMounted(() => {
   loadData()
   loadAssignees()
-  timer = setInterval(loadData, 30000)
+  timer = setInterval(loadData, 10000)
+  document.addEventListener('visibilitychange', onVisibility)
+  window.addEventListener('focus', loadData)
 })
 onUnmounted(() => {
   clearInterval(timer)
+  document.removeEventListener('visibilitychange', onVisibility)
+  window.removeEventListener('focus', loadData)
 })
 </script>
 
@@ -314,8 +325,21 @@ onUnmounted(() => {
 .alarm-item {
   display: flex; align-items: center; padding: 13px 16px;
   border-bottom: 0.5px solid rgba(255,255,255,.04);
+  position: relative; overflow: hidden;
 }
 .alarm-item:last-child { border-bottom: none; }
+/* 待处理告警：按告警等级做右侧渐变染色（严重红/重要橙/一般蓝），与告警页卡牌一致 */
+.alarm-item::before {
+  content: '';
+  position: absolute; inset: 0;
+  pointer-events: none;
+  z-index: 0;
+}
+.alarm-item--1::before { background: linear-gradient(to left, rgba(245,108,108,.30), transparent 62%); }
+.alarm-item--2::before { background: linear-gradient(to left, rgba(230,162,60,.26), transparent 62%); }
+.alarm-item--3::before { background: linear-gradient(to left, rgba(144,202,249,.24), transparent 62%); }
+/* 卡片内容抬到染色层之上，保证文字清晰可读 */
+.alarm-item > * { position: relative; z-index: 1; }
 .alarm-dot { width: 7px; height: 7px; border-radius: 50%; margin-right: 10px; flex-shrink: 0; }
 .severity-error { background: #f56c6c; }
 .severity-warn { background: #e6a23c; }
