@@ -3,10 +3,14 @@
 <mapper namespace="com.ccb.lighting.module.device.mapper.DevDeviceMapper">
 
     <insert id="insertBatch">
-        INSERT INTO dev_device (device_code, device_name, device_type, pole_id, model, vendor, status)
+        INSERT INTO dev_device (device_code, device_name, device_type, pole_id,
+        model, vendor, status,
+        create_time, update_time, create_by, update_by, deleted)
         VALUES
         <foreach collection="list" item="item" separator=",">
-            (#{item.deviceCode}, #{item.deviceName}, #{item.deviceType}, #{item.poleId}, #{item.model}, #{item.vendor}, #{item.status})
+            (#{item.deviceCode}, #{item.deviceName}, #{item.deviceType}, #{item.poleId},
+            #{item.model}, #{item.vendor}, #{item.status},
+            NOW(), NOW(), 1, 1, 0)
         </foreach>
     </insert>
 

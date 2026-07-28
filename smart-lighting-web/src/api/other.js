@@ -74,6 +74,14 @@ export function controlBrightness(params) {
   return request({ url: '/lighting/control/brightness', method: 'post', params })
 }
 
+// ========== 照明批量控制（v2 新增） ==========
+export function batchSwitchByRoad(params) {
+  return request({ url: '/lighting/control/batch/switch', method: 'post', params })
+}
+export function batchBrightnessByRoad(params) {
+  return request({ url: '/lighting/control/batch/brightness', method: 'post', params })
+}
+
 // ========== 视频监控 ==========
 export function pageCamera(params) {
   return request({ url: '/video/camera/page', method: 'get', params })

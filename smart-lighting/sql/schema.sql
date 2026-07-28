@@ -137,20 +137,46 @@ CREATE TABLE sys_role_menu (
 -- =============================================================================
 
 -- -----------------------------------------------------------------------------
+-- region 行政区划表
+-- 扁平化的区级列表，取代原来的树形 area 表。灯杆通过 region_id 关联到此表。
+-- 街道/路段逻辑由 dev_pole.road 字段覆盖，不再支持树形多层。
+-- -----------------------------------------------------------------------------
+DROP TABLE IF EXISTS region;
+CREATE TABLE region (
+                        id          BIGINT       NOT NULL AUTO_INCREMENT COMMENT '主键ID',
+                        name        VARCHAR(50)  NOT NULL COMMENT '区域名称（如武侯区、锦江区）',
+                        sort        INT          DEFAULT 0 COMMENT '排序值',
+                        status      TINYINT      DEFAULT 1 COMMENT '状态：0禁用 1启用',
+                        create_time DATETIME              COMMENT '创建时间',
+                        update_time DATETIME              COMMENT '更新时间',
+                        create_by   BIGINT                COMMENT '创建人',
+                        update_by   BIGINT                COMMENT '更新人',
+                        deleted     TINYINT      DEFAULT 0 COMMENT '逻辑删除：0未删 1已删',
+                        PRIMARY KEY (id),
+                        UNIQUE KEY uk_name (name)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='行政区划表';
+
+-- -----------------------------------------------------------------------------
 -- dev_pole 灯杆表
 -- 灯杆是物理载体，所有设备（灯、摄像头、传感器、LED屏）都挂载在灯杆上
+-- 地址由 region_id + road + number 三个独立字段拼接生成，pole_name 和 address
+-- 均为服务层自动填充，box 前端不可直接编辑。
 -- -----------------------------------------------------------------------------
 DROP TABLE IF EXISTS dev_pole;
 CREATE TABLE dev_pole (
                           id           BIGINT        NOT NULL AUTO_INCREMENT COMMENT '主键ID',
                           pole_code    VARCHAR(50)   NOT NULL COMMENT '灯杆编号（唯一）',
-                          pole_name    VARCHAR(100)  NOT NULL COMMENT '灯杆名称',
-                          area_id      BIGINT                  COMMENT '所属区域ID',
-                          address      VARCHAR(255)            COMMENT '安装地址',
+                          pole_name    VARCHAR(200)  NOT NULL COMMENT '灯杆名称（自动拼接：{区}{路}{号}灯杆）',
+                          region_id    BIGINT                  COMMENT '所属区域ID（关联 region 表）',
+                          road         VARCHAR(100)            COMMENT '道路/街/大道名称（按此字段批量控制和分组）',
+                          number       VARCHAR(50)             COMMENT '编号（如 88号、29号院）',
+                          address      VARCHAR(255)            COMMENT '安装地址（自动拼接：{区}{路}{号}）',
                           lng          DECIMAL(10,7)            COMMENT '经度（地图坐标）',
                           lat          DECIMAL(10,7)            COMMENT '纬度（地图坐标）',
                           height       DECIMAL(5,2)             COMMENT '灯杆高度(米)',
-                          status       TINYINT       DEFAULT 0 COMMENT '状态：0离线 1在线 2故障',
+                          status       TINYINT       DEFAULT 0 COMMENT '在线状态：0离线 1在线 2故障',
+                          light_status TINYINT       DEFAULT 0 COMMENT '照明状态：0关灯 1开灯',
+                          light_brightness INT      DEFAULT 0 COMMENT '当前亮度(0~100)',
                           install_time DATE                     COMMENT '安装时间',
                           create_time  DATETIME                COMMENT '创建时间',
                           update_time  DATETIME                COMMENT '更新时间',
@@ -158,7 +184,10 @@ CREATE TABLE dev_pole (
                           update_by    BIGINT                  COMMENT '更新人',
                           deleted      TINYINT       DEFAULT 0 COMMENT '逻辑删除：0未删 1已删',
                           PRIMARY KEY (id),
-                          UNIQUE KEY uk_pole_code (pole_code)
+                          UNIQUE KEY uk_pole_code (pole_code),
+                          KEY idx_region_id (region_id),
+                          KEY idx_road (road),
+                          KEY idx_region_road (region_id, road)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='灯杆表';
 
 -- -----------------------------------------------------------------------------
@@ -377,9 +406,54 @@ CREATE TABLE led_publish_log (
                                  KEY idx_publish_time (publish_time)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='LED节目发布记录表';
 
+-- -----------------------------------------------------------------------------
+-- light_command_log 照明控制指令日志表
+-- 记录每次照明控制的完整链路：哪个灯杆、什么指令、通信结果
+-- -----------------------------------------------------------------------------
+DROP TABLE IF EXISTS light_command_log;
+CREATE TABLE light_command_log (
+                                   id             BIGINT       NOT NULL AUTO_INCREMENT COMMENT '主键ID',
+                                   pole_id        BIGINT       NOT NULL COMMENT '灯杆ID',
+                                   pole_name      VARCHAR(200)          COMMENT '灯杆名称（冗余，避免join）',
+                                   command_type   VARCHAR(20)  NOT NULL COMMENT '指令类型：SWITCH开关/BRIGHTNESS调光',
+                                   command_value  VARCHAR(50)  NOT NULL COMMENT '指令值：on/off 或 0~100',
+                                   sim_status     VARCHAR(20)  NOT NULL DEFAULT 'SUCCESS' COMMENT '模拟通信状态：SUCCESS成功/FAIL失败/SKIPPED跳过(离线)',
+                                   sim_message    VARCHAR(255)          COMMENT '模拟通信结果描述',
+                                   create_time    DATETIME              COMMENT '创建时间',
+                                   update_time    DATETIME              COMMENT '更新时间',
+                                   create_by      BIGINT                COMMENT '创建人',
+                                   update_by      BIGINT                COMMENT '更新人',
+                                   deleted        TINYINT      DEFAULT 0 COMMENT '逻辑删除：0未删 1已删',
+                                   PRIMARY KEY (id),
+                                   KEY idx_pole_id (pole_id),
+                                   KEY idx_command_type (command_type),
+                                   KEY idx_sim_status (sim_status),
+                                   KEY idx_create_time (create_time)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='照明控制指令日志表';
+
 -- =============================================================================
 -- 4. 初始数据
 -- =============================================================================
+
+-- -----------------------------------------------------------------------------
+-- 4.0 初始区域数据（成都主城区）
+-- -----------------------------------------------------------------------------
+INSERT INTO region (id, name, sort, status, create_time, update_time)
+VALUES (1, '锦江区', 1, 1, NOW(), NOW());
+INSERT INTO region (id, name, sort, status, create_time, update_time)
+VALUES (2, '武侯区', 2, 1, NOW(), NOW());
+INSERT INTO region (id, name, sort, status, create_time, update_time)
+VALUES (3, '青羊区', 3, 1, NOW(), NOW());
+INSERT INTO region (id, name, sort, status, create_time, update_time)
+VALUES (4, '金牛区', 4, 1, NOW(), NOW());
+INSERT INTO region (id, name, sort, status, create_time, update_time)
+VALUES (5, '成华区', 5, 1, NOW(), NOW());
+INSERT INTO region (id, name, sort, status, create_time, update_time)
+VALUES (6, '高新区', 6, 1, NOW(), NOW());
+INSERT INTO region (id, name, sort, status, create_time, update_time)
+VALUES (7, '天府新区', 7, 1, NOW(), NOW());
+INSERT INTO region (id, name, sort, status, create_time, update_time)
+VALUES (8, '龙泉驿区', 8, 1, NOW(), NOW());
 
 -- -----------------------------------------------------------------------------
 -- 4.1 初始用户

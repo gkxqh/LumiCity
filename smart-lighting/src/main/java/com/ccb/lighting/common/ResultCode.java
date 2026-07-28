@@ -31,6 +31,7 @@ public enum ResultCode {
 
     DATA_NOT_FOUND(30001, "数据不存在"),
     DATA_ALREADY_EXISTS(30002, "数据已存在"),
+    DATA_IN_USE(30003, "数据已被引用无法删除"),
 
     DEVICE_OFFLINE(40001, "设备离线"),
     DEVICE_NOT_FOUND(40002, "设备不存在");

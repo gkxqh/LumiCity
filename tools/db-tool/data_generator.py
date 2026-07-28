@@ -5,7 +5,13 @@
 设计目标：
   - 覆盖各种情况：每种设备类型、每种告警类型/级别/状态、每种工单状态、时序数据（含昼夜变化）
   - 具有随机性：每次运行结果不同（未固定随机种子）
-  - 幂等：先清空业务表与测试用户（保留 admin 及初始角色/菜单），再重新生成
+  - 幂等：先清空业务表与测试用户（保留 admin 及初始角色/菜单/区域），再重新生成
+  
+v2 变更（2026-07-28）：
+  - area 树形 → region 扁平表
+  - dev_pole: area_id → region_id, 新增 road/number 字段
+  - pole_name/address 改为拼接生成（{区}{路}{号}灯杆 / {区}{路}{号}）
+  - 区→路白名单映射，消除不可能的区路组合
 """
 import random
 from datetime import datetime, timedelta, time as dtime
@@ -20,20 +26,129 @@ def bcrypt_hash(text: str) -> str:
     return _bcrypt.hashpw(text.encode("utf-8"), _bcrypt.gensalt()).decode("utf-8")
 
 
-# ---------- 静态数据池 ----------
-AREAS = [
-    (1, "锦江区", 104.08, 30.65),
-    (2, "武侯区", 104.05, 30.63),
-    (3, "青羊区", 104.06, 30.67),
-    (4, "金牛区", 104.05, 30.69),
-    (5, "成华区", 104.10, 30.66),
-    (6, "高新区", 104.06, 30.59),
-    (7, "天府新区", 104.07, 30.50),
-    (8, "龙泉驿区", 104.27, 30.56),
-]
-STREETS = ["人民南路", "天府大道", "蜀都大道", "红星路", "科华北路",
-           "一环路", "二环路", "三环路", "益州大道", "剑南大道",
-           "成华大道", "光华大道", "锦华路", "建设路", "沙湾路"]
+# ---------- 道路线段坐标（v4: 绕城高速以内成都主干道全覆盖） ----------
+# 格式: {区名: {路名: (lng_start, lat_start, lng_end, lat_end), ...}}
+# 基于腾讯地图/高德/天地图等公开 POI 数据标定（WGS-84），覆盖绕城高速(G4202)以内全部主要干道
+#
+# 绕城高速边界参考:
+#   北界 (~30.75): 北星立交/大丰
+#   南界 (~30.54): 锦城湖立交/白家
+#   西界 (~103.93): 文家场立交
+#   东界 (~104.20): 成渝立交/成龙立交
+#
+# 三环路参考坐标:
+#   北段(金牛): 104.02~104.08, 30.720~30.721
+#   西段(青羊): 103.993~104.005, 30.620~30.679
+#   南段(武侯/高新): 104.00~104.09, 30.590~30.618
+#   东段(锦江/成华): 104.09~104.16, 30.590~30.720
+ROAD_SEGMENTS = {
+    "锦江区": {
+        # 环线
+        "一环路":   (104.086, 30.649, 104.092, 30.660),
+        "二环路":   (104.075, 30.647, 104.095, 30.660),
+        "中环路":   (104.115, 30.614, 104.140, 30.628),
+        "三环路":   (104.088, 30.590, 104.145, 30.618),
+        # 南北向
+        "人民南路": (104.066, 30.654, 104.066, 30.647),
+        "红星路":   (104.088, 30.660, 104.089, 30.645),
+        # 东西向/放射线
+        "蜀都大道": (104.072, 30.663, 104.098, 30.660),
+        "东大街":   (104.072, 30.652, 104.092, 30.648),
+        "锦华路":   (104.080, 30.646, 104.098, 30.634),
+        "成龙大道": (104.098, 30.607, 104.140, 30.600),
+        "驿都大道": (104.100, 30.618, 104.145, 30.611),
+    },
+    "武侯区": {
+        # 环线
+        "一环路":   (104.065, 30.640, 104.055, 30.626),
+        "二环路":   (104.045, 30.638, 104.060, 30.616),
+        "中环路":   (104.014, 30.634, 104.025, 30.622),
+        "三环路":   (104.000, 30.617, 104.055, 30.599),
+        # 南北向
+        "人民南路": (104.066, 30.645, 104.070, 30.610),
+        "科华北路": (104.072, 30.634, 104.074, 30.616),
+        "高攀路":   (104.075, 30.620, 104.078, 30.608),
+        # 东西向/放射线
+        "二环路":   (104.045, 30.638, 104.060, 30.616),
+        "武侯大道": (103.983, 30.630, 104.040, 30.613),
+        "川藏路":   (104.000, 30.620, 104.015, 30.608),
+        # 西南放射
+        "草金路":   (104.000, 30.635, 103.980, 30.640),
+    },
+    "青羊区": {
+        # 环线
+        "一环路":   (104.050, 30.676, 104.040, 30.664),
+        "二环路":   (104.035, 30.678, 104.030, 30.658),
+        "中环路":   (104.008, 30.677, 104.008, 30.658),
+        "三环路":   (103.993, 30.679, 104.005, 30.647),
+        # 东西向/放射线
+        "蜀都大道": (104.042, 30.672, 104.068, 30.668),
+        "光华大道": (103.980, 30.672, 104.050, 30.665),
+        "日月大道": (103.970, 30.680, 104.040, 30.670),
+        # 南北向
+        "人民中路": (104.068, 30.676, 104.069, 30.666),
+    },
+    "金牛区": {
+        # 环线
+        "一环路":   (104.048, 30.686, 104.065, 30.692),
+        "二环路":   (104.033, 30.693, 104.055, 30.696),
+        "中环路":   (104.044, 30.716, 104.030, 30.704),
+        "三环路":   (104.020, 30.721, 104.080, 30.720),
+        # 南北向
+        "人民北路": (104.069, 30.694, 104.071, 30.682),
+        "北星大道": (104.072, 30.698, 104.075, 30.730),
+        # 东西向/放射线
+        "交大路":   (104.030, 30.690, 104.045, 30.692),
+        "沙湾路":   (104.040, 30.685, 104.050, 30.690),
+        "金府路":   (104.044, 30.716, 104.030, 30.704),
+    },
+    "成华区": {
+        # 环线
+        "一环路":   (104.095, 30.662, 104.100, 30.672),
+        "二环路":   (104.108, 30.655, 104.112, 30.675),
+        "中环路":   (104.140, 30.644, 104.120, 30.671),
+        "三环路":   (104.090, 30.720, 104.162, 30.665),
+        # 南北向
+        "府青路":   (104.090, 30.685, 104.095, 30.700),
+        "蓉都大道": (104.085, 30.700, 104.095, 30.730),
+        # 东西向/放射线
+        "成华大道": (104.098, 30.658, 104.150, 30.675),
+        "建设路":   (104.100, 30.666, 104.110, 30.658),
+        "猛追湾街": (104.092, 30.665, 104.098, 30.655),
+        "成洛大道": (104.120, 30.656, 104.185, 30.649),
+        "杉板桥路": (104.110, 30.668, 104.130, 30.664),
+    },
+    "高新区": {
+        # 环线（三环以南至绕城）
+        "三环路":   (104.055, 30.599, 104.088, 30.589),
+        "中环路":   (104.040, 30.607, 104.070, 30.605),
+        # 南北向主干道（三环→绕城）
+        "天府大道": (104.069, 30.598, 104.065, 30.560),
+        "益州大道": (104.053, 30.598, 104.050, 30.560),
+        "剑南大道": (104.042, 30.597, 104.038, 30.560),
+        # 区域道路
+        "吉泰路":   (104.050, 30.590, 104.055, 30.580),
+        "天府二街": (104.050, 30.585, 104.070, 30.585),
+        "天府四街": (104.045, 30.578, 104.070, 30.578),
+    },
+    "天府新区": {
+        # 绕城高速以南区域（维持原有，更新坐标）
+        "天府大道": (104.065, 30.550, 104.062, 30.520),
+        "益州大道": (104.050, 30.550, 104.048, 30.520),
+        "剑南大道": (104.038, 30.550, 104.035, 30.520),
+        "沈阳路":   (104.043, 30.505, 104.060, 30.503),
+        "武汉路":   (104.048, 30.518, 104.070, 30.515),
+    },
+    "龙泉驿区": {
+        # 绕城高速以东区域（三环至绕城之间）
+        "成华大道": (104.155, 30.678, 104.185, 30.660),
+        "驿都大道": (104.150, 30.611, 104.195, 30.565),
+        "成龙大道": (104.145, 30.600, 104.195, 30.555),
+        "成洛大道": (104.190, 30.649, 104.220, 30.648),
+        "车城大道": (104.270, 30.570, 104.275, 30.545),
+    },
+}
+
 SURNAMES = ["张", "李", "王", "刘", "陈", "杨", "赵", "黄", "周", "吴",
             "徐", "孙", "马", "朱", "胡", "林", "郭", "何", "高", "罗"]
 GIVEN = ["伟", "芳", "娜", "敏", "静", "强", "磊", "军", "洋", "勇",
@@ -94,7 +209,7 @@ class DataGenerator:
         self.cur.execute(sql, vals)
         return self.cur.lastrowid
 
-    # ---------- 清空（保留 admin 与初始角色/菜单） ----------
+    # ---------- 清空（保留 admin 与初始角色/菜单/区域） ----------
     def clear(self):
         # 先删业务表（引用设备/灯杆），再删设备/灯杆
         for t in ["energy_record", "alarm_record", "work_order",
@@ -112,6 +227,7 @@ class DataGenerator:
         self.cur.execute("DELETE FROM sys_user_role WHERE user_id > 1 OR role_id > 2")
         self.cur.execute("DELETE FROM sys_user WHERE id > 1")
         self.cur.execute("DELETE FROM sys_role WHERE id > 2")
+        # 注意：region 数据是 schema.sql 中的初始数据，不清空
         self.conn.commit()
         self.counts["cleared"] = True
 
@@ -126,8 +242,6 @@ class DataGenerator:
                  "update_time", "create_by", "update_by", "deleted"],
                 ("INSPECTOR", "巡检人员", "负责日常巡检与工单执行", 1, *self._audit()),
             )
-            # 给巡检角色绑定业务菜单（排除系统管理相关及按钮权限）
-            # 系统管理目录(ID=1)及其子菜单(ID=2/3/4)均排除
             self.cur.execute(
                 "SELECT id FROM sys_menu WHERE deleted=0 AND menu_type != 'BUTTON'"
                 " AND id NOT IN (1, 2, 3, 4)"
@@ -151,7 +265,7 @@ class DataGenerator:
             used.add(name)
             username = "user" + str(100 + cnt)
             role_code = random.choice(["OPERATOR", "INSPECTOR", "OPERATOR"])  # 运维偏多
-            status = 0 if random.random() < 0.15 else 1  # 约15%禁用
+            status = 0 if random.random() < 0.15 else 1
             uid = self._insert(
                 "sys_user",
                 ["username", "password", "nickname", "phone", "email", "status",
@@ -172,33 +286,71 @@ class DataGenerator:
         self.cur.execute("SELECT id, username, nickname FROM sys_user WHERE deleted=0 AND status=1")
         return self.cur.fetchall()  # [(id, username, nickname)]
 
-    # ---------- 灯杆 ----------
-    def gen_poles(self, n=30):
+    # ---------- 灯杆（v3: 沿道路线段插值生成坐标） ----------
+    def gen_poles(self, n=300):
+        # 从 region 表读取已有区域数据
+        self.cur.execute("SELECT id, name FROM region WHERE deleted=0 AND status=1 ORDER BY id")
+        db_regions = [(row[0], row[1]) for row in self.cur.fetchall()]
+        if not db_regions:
+            # 如果 region 表为空（比如初次运行但没初始化），用硬编码数据
+            print("WARNING: region 表为空，使用硬编码区域数据")
+            db_regions = [(1, "锦江区"), (2, "武侯区"), (3, "青羊区"), (4, "金牛区"),
+                          (5, "成华区"), (6, "高新区"), (7, "天府新区"), (8, "龙泉驿区")]
+
+        # 建立 region_id → (区名, {路名: (lng1,lat1,lng2,lat2)})
+        region_segments = {}
+        for rid, name in db_regions:
+            segs = ROAD_SEGMENTS.get(name)
+            if segs:
+                region_segments[rid] = (name, segs)
+            else:
+                # 兜底：给一个默认的线段
+                region_segments[rid] = (name, {"人民路": (104.06, 30.65, 104.07, 30.64)})
+
+        # 收集所有路名列表，用于按道路分组
+        all_road_names = []
+        for rid, (rname, segs) in region_segments.items():
+            for road in segs.keys():
+                all_road_names.append((rid, rname, road))
+
         poles = []
         for i in range(n):
-            area = random.choice(AREAS)
-            area_id, area_name, clng, clat = area
-            lng = round(clng + random.uniform(-0.012, 0.012), 7)
-            lat = round(clat + random.uniform(-0.010, 0.010), 7)
-            street = random.choice(STREETS)
-            no = random.randint(1, 200)
-            pole_code = f"P-A{area_id}-{i+1:03d}"
-            pole_name = f"{area_name}{street}{no}号灯杆"
-            address = f"{area_name}{street}{no}号"
+            # 随机选一条道路
+            rid, region_name, road = random.choice(all_road_names)
+            segs = region_segments[rid][1]
+            lng1, lat1, lng2, lat2 = segs[road]
+
+            # 沿线段随机插值
+            t = random.random()
+            lng = round(lng1 + (lng2 - lng1) * t, 7)
+            lat = round(lat1 + (lat2 - lat1) * t, 7)
+
+            # 编号采用序号（1~299），使同一路段的灯杆编号有序
+            no = random.randint(1, 500)
+            pole_code = f"P-A{rid}-{i+1:03d}"
+
+            # pole_name 和 address 由拼接生成（模拟后端 fillNameAndAddress 逻辑）
+            address = f"{region_name}{road}{no}号"
+            pole_name = f"{address}灯杆"
+
             # 状态分布：在线70% / 离线20% / 故障10%
             status = _weighted([1, 0, 2], [70, 20, 10])
+            # 照明状态：约60%开灯 40%关灯
+            light_status = 1 if random.random() < 0.6 else 0
+            # 如果开灯则随机亮度 40~100，关灯亮度=0
+            light_brightness = random.randint(40, 100) if light_status == 1 else 0
             height = round(random.uniform(6, 12), 2)
             install = (self.now - timedelta(days=random.randint(30, 720))).date()
             pid = self._insert(
                 "dev_pole",
-                ["pole_code", "pole_name", "area_id", "address", "lng", "lat", "height",
-                 "status", "install_time", "create_time", "update_time",
-                 "create_by", "update_by", "deleted"],
-                (pole_code, pole_name, area_id, address, lng, lat, height,
-                 status, install, *self._audit()),
+                ["pole_code", "pole_name", "region_id", "road", "number", "address",
+                 "lng", "lat", "height", "status", "light_status", "light_brightness", "install_time",
+                 "create_time", "update_time", "create_by", "update_by", "deleted"],
+                (pole_code, pole_name, rid, road, f"{no}号", address,
+                 lng, lat, height, status, light_status, light_brightness, install, *self._audit()),
             )
-            poles.append({"id": pid, "code": pole_code, "area_id": area_id,
-                          "status": status, "lng": lng, "lat": lat})
+            poles.append({"id": pid, "code": pole_code, "region_id": rid,
+                          "status": status, "lng": lng, "lat": lat, "road": road})
         self.conn.commit()
         self.counts["dev_pole"] = n
         self._poles = poles
@@ -209,8 +361,8 @@ class DataGenerator:
         devices = []
         code_seq = 1
         for pole in self._poles:
-            cnt = random.randint(1, per_pole_max)
-            # 故障灯杆上的设备大概率故障，离线灯杆设备离线
+            # 大部分灯杆只有1台设备（60%概率1台，25%概率2台，15%概率3台）
+            cnt = _weighted([1, 2, 3], [60, 25, 15])
             for _ in range(cnt):
                 dtype = _weighted([t for t, _ in DEVICE_TYPE_WEIGHTS],
                                   [w for _, w in DEVICE_TYPE_WEIGHTS])
@@ -293,7 +445,7 @@ class DataGenerator:
     def gen_alarms(self, n=50):
         users = [u for u in self._fetch_users()]
         rows = 0
-        self._alarms = []  # [(alarm_id, device_code, pole_id, alarm_type, alarm_level, status), ...]
+        self._alarms = []
         for _ in range(n):
             dev = random.choice(self._devices)
             atype = _weighted(ALARM_TYPES, ALARM_TYPE_WEIGHTS)
@@ -310,10 +462,8 @@ class DataGenerator:
             }
             handle_user = handle_time = handle_result = None
             if status in (1, 2):
-                # 处理中 / 已闭环 均已分配处理人
                 handle_user = random.choice(users)[1] if users else "admin"
             if status == 2:
-                # 已闭环：填写处理意见 + 完成时间
                 handle_time = alarm_time + timedelta(minutes=random.randint(10, 600))
                 handle_result = random.choice(HANDLE_RESULTS)
             alarm_id = self._insert(
@@ -324,7 +474,6 @@ class DataGenerator:
                 (dev["code"], dev["pole_id"], atype, level, content_map[atype],
                  alarm_time, status, handle_user, handle_time, handle_result, *self._audit()),
             )
-            # 保存告警ID信息（处理中/已闭环的告警可用于关联工单）
             if status in (1, 2):
                 self._alarms.append((alarm_id, dev["code"], dev["pole_id"], atype, level, status))
             rows += 1
@@ -388,17 +537,12 @@ class DataGenerator:
         titles_repair = ["灯具更换", "摄像头维修", "传感器校准", "电源故障修复", "LED屏维修"]
         seq = 1
 
-        # 先创建当前最新序列号：查已有最大工单编号的后缀
         self.cur.execute("SELECT order_no FROM work_order ORDER BY id DESC LIMIT 1")
         row = self.cur.fetchone()
         if row:
             last_seq = int(row[0].split("-")[-1])
             seq = last_seq + 1
 
-        # --- A) 告警关联工单：为每个已分配处理人的告警（status=1/2）都生成工单 ---
-        # 业务流：告警1处理中 → 系统自动生成工单(1处理中) → 工单完成后(2已完成)
-        #        → 运维写处理意见 → 告警2已闭环
-        # 所以：告警1 可以有工单1或2，告警2 工单必须为2
         alarm_related = 0
         alarm_list = self._alarms if hasattr(self, '_alarms') and self._alarms else []
         for (alarm_id, dev_code, pole_id, alarm_type, alarm_level, alarm_status) in alarm_list:
@@ -413,9 +557,6 @@ class DataGenerator:
             assignee = random.choice(users)
             finish = create_t + timedelta(hours=random.randint(2, 48))
 
-            # 工单状态由告警状态决定：
-            #   - 告警 status=1（处理中）→ 工单可1可2（处理人可能还没填备注）
-            #   - 告警 status=2（已闭环）→ 工单必须为2（已完成）
             if alarm_status == 2:
                 wo_status = 2
             else:
@@ -435,7 +576,6 @@ class DataGenerator:
             )
             alarm_related += 1
 
-        # --- B) 独立工单（手动创建的巡检/维修，无 alarm_id，固定约 10 个）---
         independent_target = 10
         for _ in range(independent_target):
             dev = random.choice(self._devices)
@@ -461,7 +601,7 @@ class DataGenerator:
                  f"针对设备 {dev['code']} 的{title}任务",
                  dev["code"], dev["pole_id"], assignee,
                  random.choice([1, 2, 2, 3]),
-                 status, finish, remark, None,   # alarm_id = None
+                 status, finish, remark, None,
                  create_t, self.now, 1, 1, 0),
             )
         self.conn.commit()
@@ -473,7 +613,7 @@ class DataGenerator:
         self.gen_roles()
         self.gen_users()
         self.gen_poles()
-        self.gen_devices()
+        self.gen_devices(per_pole_max=3)
         self.gen_strategies()
         self.gen_energy()
         self.gen_alarms()
