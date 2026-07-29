@@ -20,7 +20,7 @@ import java.util.concurrent.CopyOnWriteArraySet;
  * 当告警产生/处理时，由 AlarmRecordServiceImpl 调用 broadcast 推送实时告警事件。</p>
  *
  * <p>设计要点：
- * - 会话集合用 CopyOnWriteArraySet，保证遍历广播时的线程安全
+ * - 会话集合用 CopyOnWriteArraySet，写时复制可以保证遍历广播时的线程安全
  * - sendMessage 非线程安全，对单个 session 加锁后再发
  * - alarm-push-enabled 开关：application.yml 中 lighting.alarm-push-enabled=false 时关闭推送
  *   （WebSocket 连接仍可建立，只是不广播业务消息，便于联调/压测时静默）</p>
@@ -37,16 +37,16 @@ public class AlarmWebSocketHandler extends TextWebSocketHandler {
     private boolean pushEnabled;
 
     /** 在线客户端会话集合（线程安全） */
-    private final Set<WebSocketSession> sessions = new CopyOnWriteArraySet<>();
+    private final Set<WebSocketSession> sessions = new CopyOnWriteArraySet<>();//CopyOnWriteArraySet保证遍历广播时的线程安全
 
-    @Override
+    @Override//新连接建立时把会话加入集合并记录日志
     public void afterConnectionEstablished(WebSocketSession session) {
         sessions.add(session);
         Object username = session.getAttributes().get("username");
         log.info("告警 WebSocket 已连接：{}（用户={}），当前在线={}", session.getId(), username, sessions.size());
     }
 
-    @Override
+    @Override//断开连接时把会话从集合中移除并记录日志
     public void afterConnectionClosed(WebSocketSession session, CloseStatus status) {
         sessions.remove(session);
         log.info("告警 WebSocket 已断开：{}，当前在线={}", session.getId(), sessions.size());
@@ -84,6 +84,7 @@ public class AlarmWebSocketHandler extends TextWebSocketHandler {
 
     /**
      * 定向推送给指定用户（通过握手时注入的 username 匹配）
+     * 工单派发时通知处理人
      */
     public void sendToUser(String username, Object payload) {
         if (!pushEnabled || sessions.isEmpty()) {

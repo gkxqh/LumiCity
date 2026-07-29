@@ -13,8 +13,8 @@ import java.util.Map;
 /**
  * 照明实时控制 Controller
  *
- * <p>控制链路（LightControlService）：在线校验 → 模拟通信(sleep+95%成功率) → 写库 → 记日志
- * 离线/故障设备将被跳过，不会执行任何操作。</p>
+ * <p>控制链路（LightControlService）：在线校验 → 模拟通信 → 写库 → 记日志
+ * 离线/故障设备将不会收到指令。</p>
  */
 @RestController
 @RequestMapping("/lighting/control")
@@ -23,11 +23,12 @@ public class LightControlController {
 
     private final LightControlService lightControlService;
 
-    @PostMapping("/switch")
+    @PostMapping("/switch")//单杆控制，制定灯杆ID+开关
     public Result<Map<String, Object>> switchLight(
-            @RequestParam Long poleId,
-            @RequestParam String action) {
+            @RequestParam Long poleId,//灯杆ID
+            @RequestParam String action) {//开关
         Map<String, Object> result = lightControlService.switchLight(poleId, action);
+        //调LightControlService的switchLight方法，执行单灯开关，把返回结果存入result这个Map
         String msg = (String) result.get("message");
         if ("灯杆不存在".equals(msg)) {
             return Result.error("灯杆不存在");
@@ -35,7 +36,7 @@ public class LightControlController {
         return Result.success(result);
     }
 
-    @PostMapping("/brightness")
+    @PostMapping("/brightness")//单杆控制，制定灯杆ID+亮度
     public Result<Map<String, Object>> adjustBrightness(
             @RequestParam Long poleId,
             @RequestParam Integer brightness) {
@@ -50,14 +51,14 @@ public class LightControlController {
         return Result.success(result);
     }
 
-    @PostMapping("/batch/switch")
+    @PostMapping("/batch/switch")//批量控制，指定道路名称
     public Result<Map<String, Object>> batchSwitchByRoad(
             @RequestParam String road,
             @RequestParam String action) {
         return Result.success(lightControlService.batchSwitchByRoad(road, action));
     }
 
-    @PostMapping("/batch/brightness")
+    @PostMapping("/batch/brightness")//按照道路批量调节亮度
     public Result<Map<String, Object>> batchBrightnessByRoad(
             @RequestParam String road,
             @RequestParam Integer brightness) {
@@ -69,7 +70,7 @@ public class LightControlController {
         return Result.success(result);
     }
 
-    @PostMapping("/batch/switch-by-region")
+    @PostMapping("/batch/switch-by-region")//按区域批量开关
     public Result<Map<String, Object>> batchSwitchByRegion(
             @RequestParam Long regionId,
             @RequestParam String action) {
