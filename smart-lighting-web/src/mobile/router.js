@@ -31,6 +31,11 @@ const routes = [
     path: '/pole',
     name: 'PoleList',
     component: () => import('./views/PoleList.vue')
+  },
+  {
+    path: '/workorder',
+    name: 'WorkOrder',
+    component: () => import('./views/WorkOrder.vue')
   }
 ]
 

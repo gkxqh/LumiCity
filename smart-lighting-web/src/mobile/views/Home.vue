@@ -31,16 +31,41 @@
       <div v-else>
         <div
           class="alarm-item"
+          :class="'alarm-item--' + (a.alarmLevel ?? 3)"
           v-for="(a, i) in alarms"
           :key="a.id"
           @click="handleAlarm(a)"
         >
-          <div class="alarm-dot" :class="severityClass(a.severity)"></div>
+          <div class="alarm-dot" :class="severityClass(a.alarmLevel)"></div>
           <div class="alarm-info">
-            <div class="alarm-title">{{ a.content || a.deviceName || '未知告警' }}</div>
+            <div class="alarm-title">{{ a.alarmContent || a.deviceName || '未知告警' }}</div>
             <div class="alarm-time">{{ a.createTime }}</div>
           </div>
-          <van-tag round plain :class="'severity-' + (a.severity ?? 0)">{{ severityText(a.severity) }}</van-tag>
+          <van-tag round plain class="alarm-tag" :class="'severity-' + (a.alarmLevel ?? 3)">{{ severityText(a.alarmLevel) }}</van-tag>
+        </div>
+      </div>
+    </div>
+
+    <!-- 待处理工单 -->
+    <div class="section-label">🛠️ 待处理工单</div>
+    <div class="glass-card wo-section">
+      <van-empty v-if="workOrders.length === 0" description="暂无工单" />
+      <div v-else>
+        <div
+          class="wo-item"
+          :class="'wo-item--' + (w.priority ?? 3)"
+          v-for="w in workOrders"
+          :key="w.id"
+          @click="router.push('/workorder')"
+        >
+          <div class="wo-dot" :class="'wo-dot--' + (w.priority ?? 3)"></div>
+          <div class="wo-info">
+            <div class="wo-title">{{ w.title || '未命名工单' }}</div>
+            <div class="wo-time">{{ w.createTime }}</div>
+          </div>
+          <van-tag round plain class="wo-tag" :class="'wo-p-' + (w.priority ?? 3)">
+            {{ priorityMap[w.priority] || '低' }}优先级
+          </van-tag>
         </div>
       </div>
     </div>
@@ -56,17 +81,81 @@
         <div class="quick-icon">📍</div>
         <span>灯杆查询</span>
       </div>
+      <div class="glass-card quick-item" @click="router.push('/workorder')">
+        <div class="quick-icon">📋</div>
+        <span>工单运维</span>
+      </div>
     </div>
+
+    <!-- ============ 分配处理人表单（待处理告警 → 处理中，后端自动生成告警工单） ============ -->
+    <van-popup
+      v-model:show="assignShow"
+      position="bottom"
+      round
+      teleport="body"
+      @closed="resetAssignForm"
+    >
+      <div class="sheet">
+        <div class="sheet-title">分配处理人</div>
+        <van-form @submit="handleAssignSubmit">
+          <van-cell-group inset>
+            <van-field
+              :model-value="assignForm.alarmContent"
+              label="告警内容"
+              type="textarea"
+              rows="2"
+              autosize
+              readonly
+            />
+            <van-field
+              :model-value="assigneeLabel"
+              label="处理人"
+              placeholder="请选择运维人员"
+              is-link
+              readonly
+              :rules="[{ required: true, message: '请选择处理人' }]"
+              @click="assigneePickerShow = true"
+            />
+          </van-cell-group>
+          <div class="sheet-tip">提交后告警进入「处理中」，并自动生成告警工单指派给处理人</div>
+          <div class="sheet-btns">
+            <button type="button" class="glass-btn sheet-btn" @click="assignShow = false">取 消</button>
+            <van-button
+              class="sheet-btn"
+              type="primary"
+              round
+              block
+              native-type="submit"
+              :loading="assignSubmitting"
+            >确 定</van-button>
+          </div>
+        </van-form>
+      </div>
+    </van-popup>
+
+    <!-- 处理人选择器 -->
+    <van-popup v-model:show="assigneePickerShow" position="bottom" round teleport="body">
+      <van-picker
+        :columns="assigneeOptions.map(u => ({ text: u.label, value: u.value }))"
+        @confirm="({ selectedOptions }) => { assignForm.handleUser = selectedOptions[0]?.value ?? ''; assigneePickerShow = false }"
+        @cancel="assigneePickerShow = false"
+      />
+    </van-popup>
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted, onUnmounted } from 'vue'
+import { ref, reactive, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useUserStore } from '@/store/user'
-import { getOverview, getLatestAlarm } from '@/api/other'
-import { showToast, showConfirmDialog } from 'vant'
-import { handleAlarm as handleAlarmApi } from '@/api/other'
+import { showToast, showSuccessToast, showConfirmDialog } from 'vant'
+import {
+  getOverview,
+  pageAlarm,
+  handleAlarm as handleAlarmApi,
+  listUsersByRole,
+  pageWorkOrder
+} from '@/api/other'
 
 const router = useRouter()
 const userStore = useUserStore()
@@ -85,46 +174,144 @@ async function doLogout() {
 
 const stats = ref([])
 const alarms = ref([])
+const workOrders = ref([])
+// 工单优先级字典（与工单页一致）：1高 / 2中 / 3低
+const priorityMap = { 1: '高', 2: '中', 3: '低' }
 let timer = null
 
 function severityClass(s) {
-  return s === 2 ? 'severity-error' : s === 1 ? 'severity-warn' : 'severity-info'
+  return s === 1 ? 'severity-error' : s === 2 ? 'severity-warn' : 'severity-info'
 }
 function severityText(s) {
-  return s === 2 ? '严重' : s === 1 ? '一般' : '提示'
+  return s === 1 ? '严重' : s === 2 ? '重要' : '一般'
+}
+
+async function refreshOverview() {
+  // 仅刷新顶部 4 个统计卡片（不重拉告警列表）
+  try {
+    const overviewRes = await getOverview().catch(() => ({ data: {} }))
+    const d = overviewRes.data || {}
+    const map = {
+      '设备总数': d.deviceTotal,
+      '待处理告警': d.alarmPending,   // 后端字段名是 alarmPending，不是 pendingAlarm
+      '灯杆总数': d.poleTotal,
+      '今日工单': d.workOrderToday
+    }
+    stats.value.forEach(s => {
+      if (map[s.label] !== undefined && map[s.label] !== null) {
+        s.value = map[s.label]
+      }
+    })
+  } catch { /* 静默 */ }
 }
 
 async function loadData() {
   try {
     const [overviewRes, alarmRes] = await Promise.all([
       getOverview().catch(() => ({ data: {} })),
-      getLatestAlarm(5).catch(() => ({ data: [] }))
+      // 与告警页"未处理"Tab 同源：直接拉 status=0 的全部未处理告警（不再用 latest-alarm 按时间截断）
+      pageAlarm({ current: 1, size: 20, status: 0 }).catch(() => ({ data: { records: [] } }))
     ])
     const d = overviewRes.data || {}
     stats.value = [
       { icon: '📡', label: '设备总数', value: d.deviceTotal ?? '-', to: '' },
-      { icon: '⚠️', label: '待处理告警', value: d.pendingAlarm ?? '-', to: '/alarm' },
+      { icon: '⚠️', label: '待处理告警', value: d.alarmPending ?? '-', to: '/alarm' },
       { icon: '🏮', label: '灯杆总数', value: d.poleTotal ?? '-', to: '/pole' },
-      { icon: '📋', label: '今日工单', value: d.workOrderToday ?? '-', to: '' }
+      { icon: '📋', label: '今日工单', value: d.workOrderToday ?? '-', to: '/workorder' }
     ]
-    alarms.value = (alarmRes.data || []).slice(0, 5)
+    // 接口已按 status=0 过滤，这里直接取记录；首页预览展示前 10 条（其余可在告警页查看）
+    const alarmRows = (alarmRes.data || {}).records || (alarmRes.data || {}).list || []
+    alarms.value = alarmRows.slice(0, 10)
+  } catch { /* 静默 */ }
+  // 待处理工单（运维工单 alarmId=0 + 告警工单 alarmId=1）独立拉取，失败不影响告警列表
+  await loadWorkOrders().catch(() => {})
+}
+
+/* 待处理工单：拉取 status=0 的运维工单与告警工单，合并去重后取最新的前 5 条 */
+async function loadWorkOrders() {
+  const [r0, r1] = await Promise.all([
+    pageWorkOrder({ current: 1, size: 20, status: 0, alarmId: 0 }).catch(() => ({ data: { records: [] } })),
+    pageWorkOrder({ current: 1, size: 20, status: 0, alarmId: 1 }).catch(() => ({ data: { records: [] } }))
+  ])
+  const rows0 = r0.data?.records || r0.data?.list || []
+  const rows1 = r1.data?.records || r1.data?.list || []
+  const seen = new Set()
+  workOrders.value = [...rows0, ...rows1]
+    .filter(w => (w.status ?? 0) === 0 && !seen.has(w.id) && seen.add(w.id))
+    .sort((a, b) => String(b.createTime || '').localeCompare(String(a.createTime || '')))
+    .slice(0, 5)
+}
+
+/* ---------------- 分配处理人（对齐 PC 端闭环流程） ----------------
+ * 待处理告警不能直接"标记已处理"，正确流程：
+ * ① 分配处理人（status=1，后端自动创建告警工单并指派）
+ * ② 工单模块-告警工单 Tab 填处理备注提交（工单完成）
+ * ③ 告警页填写处理意见（status=2 已闭环）
+ */
+
+const assignShow = ref(false)
+const assignSubmitting = ref(false)
+const assigneePickerShow = ref(false)
+const assigneeOptions = ref([])
+
+const assignForm = reactive({
+  id: null,
+  alarmContent: '',
+  handleUser: ''   // 处理人 username（对齐 PC 端 alarm/handle 的 handleUser 参数）
+})
+
+const assigneeLabel = computed(() =>
+  assigneeOptions.value.find(u => u.value === assignForm.handleUser)?.label || ''
+)
+
+function resetAssignForm() {
+  assignForm.id = null
+  assignForm.alarmContent = ''
+  assignForm.handleUser = ''
+}
+
+async function loadAssignees() {
+  try {
+    const res = await listUsersByRole('INSPECTOR')
+    // label 显示昵称，value 用 username（后端 handleUser 存的是用户名）
+    assigneeOptions.value = (res.data || []).map(u => ({
+      label: u.nickname || u.username,
+      value: u.username
+    }))
   } catch { /* 静默 */ }
 }
 
-async function handleAlarm(a) {
-  const confirm = await showConfirmDialog({
-    title: '处理告警',
-    message: `确认处理「${a.content || a.deviceName}」？`,
-    confirmButtonText: '标记已处理'
-  }).catch(() => false)
-  if (confirm) {
-    try {
-      await handleAlarmApi({ id: a.id, status: 2, handleResult: '移动端处理' })
-      showToast('已处理')
-      await loadData()
-    } catch (e) {
-      showToast(e.message)
-    }
+// 点击待处理告警：打开分配处理人表单
+function handleAlarm(a) {
+  resetAssignForm()
+  assignForm.id = a.id
+  assignForm.alarmContent = a.alarmContent || a.deviceName || '未知告警'
+  assignShow.value = true
+}
+
+async function handleAssignSubmit() {
+  assignSubmitting.value = true
+  try {
+    // status=1：告警进入处理中，后端自动创建告警工单并指派给 handleUser
+    await handleAlarmApi({ id: assignForm.id, status: 1, handleUser: assignForm.handleUser })
+    assignShow.value = false
+    // ① 立即从本地"待处理"列表移除（该告警已进入处理中）
+    alarms.value = alarms.value.filter(x => x.id !== assignForm.id)
+    // ② 刷新顶部"待处理告警"数字
+    refreshOverview()
+    showSuccessToast('已生成告警工单')
+    // ③ 引导用户前往工单模块继续处理
+    const go = await showConfirmDialog({
+      title: '分配成功',
+      message: '告警已进入「处理中」，并自动生成告警工单。\n是否前往工单模块处理？',
+      confirmButtonText: '去处理',
+      cancelButtonText: '稍后再说'
+    }).catch(() => false)
+    if (go) router.push('/workorder?tab=alarm')
+  } catch (e) {
+    showToast(e.message || '分配失败')
+  } finally {
+    assignSubmitting.value = false
   }
 }
 
@@ -133,12 +320,23 @@ function refresh() {
   loadData()
 }
 
+/* 实时刷新：① 切回本页/App 可见，或窗口重新聚焦时立即拉取（新告警即时出现）；
+   ② 驻留本页时短轮询，保证新增/处理都能及时反映 */
+function onVisibility() {
+  if (document.visibilityState === 'visible') loadData()
+}
+
 onMounted(() => {
   loadData()
-  timer = setInterval(loadData, 30000)
+  loadAssignees()
+  timer = setInterval(loadData, 10000)
+  document.addEventListener('visibilitychange', onVisibility)
+  window.addEventListener('focus', loadData)
 })
 onUnmounted(() => {
   clearInterval(timer)
+  document.removeEventListener('visibilitychange', onVisibility)
+  window.removeEventListener('focus', loadData)
 })
 </script>
 
@@ -173,19 +371,48 @@ onUnmounted(() => {
   border-bottom: 0.5px solid rgba(255,255,255,.04);
 }
 .alarm-item:last-child { border-bottom: none; }
+/* 待处理告警：按告警等级做右侧渐变染色（严重红/重要橙/一般蓝），与告警页卡牌一致；
+   直接写在 .alarm-item 背景上，避免 ::before 在玻璃卡内的层叠问题，保证一定可见 */
+.alarm-item--1 { background: linear-gradient(to left, rgba(245,108,108,.34), transparent 72%); }
+.alarm-item--2 { background: linear-gradient(to left, rgba(230,162,60,.30), transparent 72%); }
+.alarm-item--3 { background: linear-gradient(to left, rgba(144,202,249,.28), transparent 72%); }
 .alarm-dot { width: 7px; height: 7px; border-radius: 50%; margin-right: 10px; flex-shrink: 0; }
 .severity-error { background: #f56c6c; }
 .severity-warn { background: #e6a23c; }
-.severity-info { background: #909399; }
+.severity-info { background: #90caf9; }
 .alarm-info { flex: 1; min-width: 0; }
 .alarm-title { font-size: 14px; color: rgba(255,255,255,.85); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .alarm-time { font-size: 11px; color: rgba(255,255,255,.35); margin-top: 2px; }
-:deep(.severity-2) { color: #f56c6c !important; }
-:deep(.severity-1) { color: #e6a23c !important; }
-:deep(.severity-0) { color: rgba(255,255,255,.45) !important; }
+:deep(.severity-1) { color: #f56c6c !important; }
+:deep(.severity-2) { color: #e6a23c !important; }
+:deep(.severity-3) { color: #90caf9 !important; }
+:deep(.alarm-tag) { font-size: 18px; padding: 4px 12px; line-height: 1.4; }
+
+/* 待处理工单：按优先级做右侧渐变染色（高红/中橙/低黄），与工单页卡牌一致 */
+.wo-section { padding: 0; overflow: hidden; margin-bottom: 20px; }
+.wo-item {
+  display: flex; align-items: center; padding: 13px 16px;
+  border-bottom: 0.5px solid rgba(255,255,255,.04);
+}
+.wo-item:last-child { border-bottom: none; }
+.wo-item--1 { background: linear-gradient(to left, rgba(245,108,108,.34), transparent 72%); }
+.wo-item--2 { background: linear-gradient(to left, rgba(239,138,47,.36), transparent 72%); }
+.wo-item--3 { background: linear-gradient(to left, rgba(255,216,77,.28), transparent 72%); }
+.wo-dot { width: 7px; height: 7px; border-radius: 50%; margin-right: 10px; flex-shrink: 0; }
+.wo-dot--1 { background: #f56c6c; }
+.wo-dot--2 { background: #ef8a2f; }
+.wo-dot--3 { background: #ffd84d; }
+.wo-info { flex: 1; min-width: 0; }
+.wo-title { font-size: 14px; color: rgba(255,255,255,.85); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wo-time { font-size: 11px; color: rgba(255,255,255,.35); margin-top: 2px; }
+/* 优先级标签：高红 / 中橙 / 低黄，对齐工单页 wo-p-* 样式，深色玻璃卡上清晰可见 */
+:deep(.wo-p-1) { color: #f56c6c !important; border-color: #f56c6c !important; background-color: rgba(245,108,108,.18) !important; }
+:deep(.wo-p-2) { color: #ef8a2f !important; border-color: #ef8a2f !important; background-color: rgba(239,138,47,.18) !important; }
+:deep(.wo-p-3) { color: #ffd84d !important; border-color: #ffd84d !important; background-color: rgba(255,216,77,.18) !important; }
+:deep(.wo-tag) { font-size: 18px; padding: 4px 12px; line-height: 1.4; }
 
 .quick-grid {
-  display: grid; grid-template-columns: 1fr 1fr; gap: 10px;
+  display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px;
 }
 .quick-item {
   display: flex; flex-direction: column; align-items: center; justify-content: center;
@@ -193,4 +420,24 @@ onUnmounted(() => {
   font-size: 13px; color: rgba(255,255,255,.85);
 }
 .quick-icon { font-size: 28px; }
+
+/* 底部表单弹层（与工单模块风格一致） */
+.sheet { padding: 20px 0 24px; }
+.sheet-title {
+  text-align: center; font-size: 16px; font-weight: 600;
+  color: rgba(255,255,255,.9); margin-bottom: 14px;
+}
+.sheet-tip {
+  padding: 10px 24px 0; font-size: 12px; line-height: 1.5;
+  color: rgba(255,255,255,.45);
+}
+.sheet-btns { display: flex; gap: 12px; padding: 18px 16px 0; }
+.sheet-btn { flex: 1; height: 44px; }
+.sheet :deep(.van-cell-group--inset) {
+  background: rgba(255,255,255,.04) !important;
+  border-radius: 14px;
+}
+.sheet :deep(.van-cell::after) {
+  border-color: rgba(255,255,255,.06);
+}
 </style>
